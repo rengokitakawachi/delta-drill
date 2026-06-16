@@ -1,0 +1,634 @@
+
+/* ===== assemble (BOOKS & BOOKDATA injected above) ===== */
+const BOOKMAP={}; BOOKS.forEach(b=>BOOKMAP[b.id]=b);
+/* 出題頻度の重みづけ WEIGHTS は build時に各科目 weights_*.json から data部に注入される。未設定は★2 */
+function qw(book,law){ const m=(typeof WEIGHTS!=='undefined')?WEIGHTS[book]:null; if(!m)return 2; if(m[law]!=null)return m[law]; for(const k in m){ if(law&&(law.indexOf(k)>=0||k.indexOf(law)>=0))return m[k]; } return 2; }
+const QUESTIONS=[];
+BOOKS.forEach(b=>{ (BOOKDATA[b.id]||[]).forEach((x,i)=>{ QUESTIONS.push({id:b.id+'#'+i, book:b.id, w:qw(b.id,x.law), ...x}); }); });
+function weightedSample(pool,n){ const bag=[]; pool.forEach(q=>{ const w=q.w||2; for(let i=0;i<w;i++)bag.push(q); }); const sh=shuffle(bag); const seen=new Set(),out=[]; for(const q of sh){ if(!seen.has(q.id)){ seen.add(q.id); out.push(q); if(out.length>=n)break; } } return out; }
+/* 出題順：①未回答を先頭（頻出優先）→ ②既回答は「間違い→しばらく未着手→頻出」で優先。再開時は自然と未回答から続く */
+function orderStudy(pool,n){
+  pool=(pool||[]).filter(q=>q&&!isExcluded(q.id));
+  const now=Date.now(), unseen=[], seen=[];
+  pool.forEach(q=>{ const p=H.perQ[q.id]; (p&&p.seen>0?seen:unseen).push(q); });
+  const unseenOrd=weightedSample(unseen, unseen.length); // 未回答＝頻出を優先しつつシャッフル
+  const seenOrd=seen.map(q=>{ const p=H.perQ[q.id];
+      const wrong=(p.lastOK===false)?1:0;                       // 直近で間違えた
+      const staleDays=Math.min(90,(now-(p.ts||0))/86400000);     // しばらくやっていない
+      const score=wrong*1000 + staleDays*15 + (q.w||2)*8 + Math.random()*50;
+      return {q,score}; })
+    .sort((a,b)=>b.score-a.score).map(o=>o.q);
+  const out=unseenOrd.concat(seenOrd);
+  return n?out.slice(0,n):out;
+}
+/* 選択式（穴埋め）データ */
+const byBookS={}; BOOKS.forEach(b=>byBookS[b.id]=[]);
+if(typeof SENTAKU!=='undefined'){ BOOKS.forEach(b=>{ (SENTAKU[b.id]||[]).forEach((x,i)=>{ byBookS[b.id].push({id:b.id+'§'+i, book:b.id, mode:'sentaku', w:qw(b.id,x.law), ...x}); }); }); }
+function hasSentaku(book){ return (byBookS[book]||[]).length>0; }
+const byBook={}, byBookLaw={}, lawOrder={};
+BOOKS.forEach(b=>{ byBook[b.id]=[]; byBookLaw[b.id]={}; lawOrder[b.id]=[]; });
+QUESTIONS.forEach(q=>{
+  byBook[q.book].push(q);
+  if(!byBookLaw[q.book][q.law]){ byBookLaw[q.book][q.law]=[]; lawOrder[q.book].push(q.law); }
+  byBookLaw[q.book][q.law].push(q);
+});
+document.getElementById('qtotal').textContent=QUESTIONS.length;
+
+/* ===== history ===== */
+const HKEY='sharoushi_quiz_v1';
+let H=load();
+function load(){ try{return JSON.parse(localStorage.getItem(HKEY))||{perQ:{}};}catch(e){return {perQ:{}};} }
+if(!H.perQ)H.perQ={}; if(!H.excluded)H.excluded={};
+function isExcluded(id){ return !!(id&&H.excluded&&H.excluded[id]); }
+function noEx(list){ return list.filter(q=>!isExcluded(q.id)); }
+function excludeCur(){ const it=session.list[session.idx]; if(it&&it.id){ H.excluded[it.id]=1; save(); schedulePush(); } next(); }
+function reviveCur(){ const it=session.list[session.idx]; if(it&&it.id){ delete H.excluded[it.id]; if(H.perQ[it.id])H.perQ[it.id].streak=0; save(); schedulePush(); } next(); }
+function excludedList(book){ return [].concat(byBook[book]||[], byBookS[book]||[]).filter(q=>isExcluded(q.id)); }
+function save(){ try{localStorage.setItem(HKEY,JSON.stringify(H));}catch(e){} }
+function rec(id,ok){ if(!id)return; const p=H.perQ[id]||{seen:0,correct:0,lastOK:null,streak:0}; p.seen++; if(ok){ p.correct++; p.streak=(p.streak||0)+1; } else { p.streak=0; } p.lastOK=ok; p.ts=Date.now(); if(ok&&p.streak>=3){ H.excluded[id]=1; } H.perQ[id]=p; save(); schedulePush(); }
+function statOf(list){ let seen=0,correct=0,distinct=0; list.forEach(q=>{const p=H.perQ[q.id]; if(p){seen+=p.seen;correct+=p.correct;distinct++;}}); return {seen,correct,distinct,total:list.length,acc:seen?correct/seen:null}; }
+function accColor(a){ if(a===null)return '#475569'; if(a>=0.8)return '#22c55e'; if(a>=0.6)return '#fbbf24'; return '#fb7185'; }
+function shuffle(a){ a=a.slice(); for(let i=a.length-1;i>0;i--){const j=Math.random()*(i+1)|0;[a[i],a[j]]=[a[j],a[i]];} return a; }
+
+/* ===== study timer ===== */
+const SKEY='sharoushi_study_v1';
+let S=loadS();
+function loadS(){ try{return JSON.parse(localStorage.getItem(SKEY))||{log:{}};}catch(e){return {log:{}};} }
+if(!S.log)S.log={}; if(!S.daily)S.daily={};
+const DAILY_GOAL=50; const EXAM=new Date(2026,7,23);
+function daysToExam(){ return Math.max(0,Math.ceil((EXAM-new Date())/86400000)); }
+function todayCount(){ return (S.daily[today()]||0); }
+function bumpDaily(){ const t=today(); S.daily[t]=(S.daily[t]||0)+1; saveS(); }
+function renderTdg(){ const el=document.getElementById('tdg'); if(!el)return; const tc=todayCount(); el.innerHTML='📅 本日 <b style="color:'+(tc>=DAILY_GOAL?'#86efac':'var(--gold)')+'">'+tc+'</b>/'+DAILY_GOAL+'問'+(tc>=DAILY_GOAL?' 🎉':''); }
+function saveS(){ try{localStorage.setItem(SKEY,JSON.stringify(S));}catch(e){} }
+let timer={running:false,startTs:0};
+function dkey(d){ return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); }
+function today(){ return dkey(new Date()); }
+function todaySecs(){ return (S.log[today()]||0) + (timer.running?Math.floor((Date.now()-timer.startTs)/1000):0); }
+function totalSecs(){ let t=0; for(const k in S.log)t+=S.log[k]; if(timer.running)t+=Math.floor((Date.now()-timer.startTs)/1000); return t; }
+function mondayOf(d){ const x=new Date(d); const g=x.getDay(); x.setDate(x.getDate()+(g===0?-6:1-g)); x.setHours(0,0,0,0); return x; } /* 週は月曜始まり */
+function weekSecs(){ let t=0; const tk=today(); for(let d=mondayOf(new Date());;d.setDate(d.getDate()+1)){ const k=dkey(d); t+=(k===tk?todaySecs():(S.log[k]||0)); if(k===tk)break; } return t; }
+function flush(){ if(timer.running){ const t=today(),add=Math.floor((Date.now()-timer.startTs)/1000); if(add>0){S.log[t]=(S.log[t]||0)+add;} timer.startTs=Date.now(); saveS(); } }
+function startStudy(){ timer.running=true; timer.startTs=Date.now(); renderTimerChip(); if(view==='home')renderHome(); }
+function stopStudy(){ flush(); timer.running=false; saveS(); pushNow(); renderTimerChip(); if(view==='home')renderHome(); }
+function toggleStudy(){ timer.running?stopStudy():startStudy(); }
+function fmtClock(s){ const h=Math.floor(s/3600),m=Math.floor(s%3600/60),x=s%60; return h+':'+String(m).padStart(2,'0')+':'+String(x).padStart(2,'0'); }
+function fmtHM(s){ const h=Math.floor(s/3600),m=Math.floor(s%3600/60); return h?(h+'時間'+m+'分'):(m+'分'); }
+function renderTimerChip(){ const el=document.getElementById('timerchip'); if(!el)return;
+  if(timer.running){ el.className='timerchip running'; el.innerHTML='● '+fmtClock(todaySecs()); }
+  else { el.className='timerchip'; el.innerHTML='⏱ '+fmtHM(todaySecs()); } }
+function planCardHTML(){
+  const dc=daysToExam(), tc=todayCount(), pct=Math.min(100,Math.round(tc/DAILY_GOAL*100));
+  return `<div class="studycard">
+    <div style="display:flex;gap:10px;margin-bottom:10px">
+      <div class="ovcard" style="flex:1"><div class="ovnum" style="color:var(--gold)">${dc}</div><div class="ovlbl">本番(8/23)まで日</div></div>
+      <div class="ovcard" style="flex:1"><div class="ovnum">${tc}<span style="font-size:14px;color:#64748b">/${DAILY_GOAL}</span></div><div class="ovlbl">今日の問題数</div></div>
+    </div>
+    <div class="lbar"><div style="width:${pct}%;background:${tc>=DAILY_GOAL?'var(--ok)':'var(--maru)'}"></div></div>
+    <div style="text-align:center;font-size:12px;margin-top:8px;color:${tc>=DAILY_GOAL?'#86efac':'var(--sub)'}">${tc>=DAILY_GOAL?'🎉 今日の目標達成！この調子で毎日！':'1日50問プラン（○×30・選択15・計算5）'}</div>
+  </div>`;
+}
+function studyCardHTML(){
+  const wd=['日','月','火','水','木','金','土'];
+  const tk=today(); let days=[]; const mon=mondayOf(new Date()); for(let i=0;i<7;i++){ const d=new Date(mon); d.setDate(mon.getDate()+i); const k=dkey(d); days.push({k,d,secs:(k===tk?todaySecs():(S.log[k]||0)),future:k>tk}); }
+  const max=Math.max(60,...days.map(x=>x.secs));
+  const bars=days.map(x=>`<div class="daybar ${x.k===today()?'today':''}${x.future?' future':''}"><div class="bmin">${x.secs>=30?Math.round(x.secs/60)+'分':''}</div><div class="b2" style="height:${Math.round(x.secs/max*100)}%"></div><div class="dl">${wd[x.d.getDay()]}</div></div>`).join('');
+  return `<div class="studycard">
+    <div class="studytop">
+      <div><div class="studybig" id="todaybig">${fmtClock(todaySecs())}</div><div class="studylbl">本日の学習時間</div></div>
+      <button class="stbtn ${timer.running?'stop':'go'}" onclick="toggleStudy()">${timer.running?'■ 停止':'▶ スタート'}</button>
+    </div>
+    <div class="studysub"><span>今週 <b>${fmtHM(weekSecs())}</b></span><span>累計 <b>${fmtHM(totalSecs())}</b></span></div>
+    <div class="daybars">${bars}</div>
+    <button class="spbtn" id="slogbtn" onclick="toggleStudyLog()">📊 これまでの学習時間を見る</button>
+    <div id="studylog" style="display:none"></div>
+  </div>`;
+}
+function toggleStudyLog(){
+  const el=document.getElementById('studylog'),btn=document.getElementById('slogbtn'); if(!el)return;
+  if(el.style.display==='none'){ el.innerHTML=studyLogHTML(); el.style.display='block'; if(btn)btn.textContent='▲ 閉じる'; }
+  else { el.style.display='none'; if(btn)btn.textContent='📊 これまでの学習時間を見る'; }
+}
+function studyLogHTML(){
+  const map={}; for(const k in S.log){ if(S.log[k]>0) map[k]=S.log[k]; }
+  const tk=today(); if(todaySecs()>0) map[tk]=todaySecs();
+  const keys=Object.keys(map).sort().reverse();
+  if(!keys.length)return '<div class="slempty">まだ記録がありません。▶ スタートで計測を始めましょう。</div>';
+  const wd=['日','月','火','水','木','金','土'];
+  const mon={}; keys.forEach(k=>{ const m=k.slice(0,7); mon[m]=(mon[m]||0)+map[k]; });
+  const monHtml=Object.keys(mon).sort().reverse().map(m=>{ const[y,mo]=m.split('-'); return `<div class="slmon"><span>${y}年${+mo}月 合計</span><span>${fmtHM(mon[m])}</span></div>`; }).join('');
+  const rows=keys.map(k=>{ const d=new Date(k+'T00:00:00'); const md=(+k.slice(5,7))+'/'+(+k.slice(8,10)); return `<div class="slrow"><span class="sld">${md}（${wd[d.getDay()]}）${k===tk?' ·本日':''}</span><span class="slm">${fmtHM(map[k])}</span></div>`; }).join('');
+  return `<div class="sllist">${monHtml}<div class="slhead">日別</div>${rows}</div>`;
+}
+setInterval(()=>{ if(timer.running){ renderTimerChip(); const tb=document.getElementById('todaybig'); if(tb)tb.textContent=fmtClock(todaySecs()); if(Date.now()%10000<1000){ flush(); schedulePush(); } } },1000);
+document.addEventListener('visibilitychange',()=>{ if(document.hidden){ flush(); } else if(timer.running){ timer.startTs=Date.now(); } });
+window.addEventListener('beforeunload',flush);
+
+/* ===== data export / import (iCloud Drive friendly) ===== */
+function exportData(){
+  flush();
+  const payload={app:'sharoushi-quiz',v:1,exportedAt:new Date().toISOString(),H:H,S:S};
+  const blob=new Blob([JSON.stringify(payload)],{type:'application/json'});
+  const url=URL.createObjectURL(blob);
+  const d=new Date(),p=n=>String(n).padStart(2,'0');
+  const fn='社労士問題集-backup-'+d.getFullYear()+p(d.getMonth()+1)+p(d.getDate())+'-'+p(d.getHours())+p(d.getMinutes())+'.json';
+  const a=document.createElement('a'); a.href=url; a.download=fn; document.body.appendChild(a); a.click();
+  document.body.removeChild(a); setTimeout(()=>URL.revokeObjectURL(url),3000);
+  setTimeout(()=>alert('バックアップを書き出しました📤\n\n保存先で「iCloud Drive」を選ぶと、iPadなど別端末でも読み込めます。\n（別端末で 📥読み込み → このファイルを選択 → 合算）'),300);
+}
+function applyImport(data){
+  if(!data||(!data.H&&!data.S)){ alert('バックアップデータが見つかりませんでした。'); return; }
+  if(!confirm('このバックアップを現在の端末のデータに合算します。\n（各項目は「多い方」を採用。重複読み込みしても二重計上されません）\n\n実行しますか？'))return;
+  if(data.H&&data.H.perQ){ for(const id in data.H.perQ){ const inc=data.H.perQ[id],cur=H.perQ[id];
+    if(!cur){H.perQ[id]=inc;} else {H.perQ[id]={seen:Math.max(cur.seen||0,inc.seen||0),correct:Math.max(cur.correct||0,inc.correct||0),lastOK:(inc&&inc.lastOK!=null)?inc.lastOK:cur.lastOK};} } save(); }
+  if(data.S&&data.S.log){ for(const k in data.S.log){ S.log[k]=Math.max(S.log[k]||0,data.S.log[k]||0); } saveS(); }
+  alert('読み込み・合算が完了しました ✅');
+  renderHeader(); goHome();
+}
+function syncCardHTML(){
+  const code=syncCode();
+  return `<div class="studycard" style="margin-top:6px">
+    <div style="font-size:13px;font-weight:800;color:#e2e8f0;margin-bottom:6px">☁️ クラウド自動同期 <span id="syncstatus" class="syncstatus">…</span></div>
+    <div style="font-size:11.5px;color:#94a3b8;line-height:1.65;margin-bottom:9px">両端末で<b style="color:#bae6fd">同じ同期コード</b>を入力すると、解いた内容・学習時間が<b style="color:#bae6fd">リアルタイム自動同期</b>されます（推測されにくい文字列に）。</div>
+    <div style="display:flex;gap:8px">
+      <input id="synccodeinput" placeholder="同期コード" value="${(code||'').replace(/"/g,'&quot;')}" autocapitalize="off" autocorrect="off" spellcheck="false" style="flex:1;min-width:0;background:#0f172a;border:1px solid var(--line);color:var(--txt);border-radius:10px;padding:10px 12px;font-size:14px">
+      <button class="stbtn" style="background:var(--maru);color:#fff" onclick="setSyncCode(document.getElementById('synccodeinput').value)">接続</button>
+    </div>
+    <div style="display:flex;gap:8px;margin-top:8px">
+      <button class="spbtn" style="margin-top:0;flex:1" onclick="genCode()">🎲 コード生成</button>
+      <button class="spbtn" style="margin-top:0;flex:1" onclick="exportData()">📤 バックアップ</button>
+      <button class="spbtn" style="margin-top:0;flex:1" onclick="document.getElementById('importfile').click()">📥 復元</button>
+    </div>
+  </div>`;
+}
+function genCode(){ const c='sr-'+Math.random().toString(36).slice(2,8)+Math.random().toString(36).slice(2,6); const el=document.getElementById('synccodeinput'); if(el)el.value=c; }
+
+/* ===== Obsidian 連携（参照ページ → 該当ノートのページ見出しへ） ===== */
+function obsVault(){ try{return localStorage.getItem('obsidian_vault')||'Vault';}catch(e){return 'Vault';} }
+function obsFolder(){ try{return localStorage.getItem('obsidian_folder')||'社労士';}catch(e){return '社労士';} }
+function obsMode(){ try{return localStorage.getItem('obsidian_mode')||'adv';}catch(e){return 'adv';} } /* adv=一発ジャンプ / search=検索 */
+function setObsConfig(v,f){ try{localStorage.setItem('obsidian_vault',(v||'').trim()); localStorage.setItem('obsidian_folder',(f||'').trim().replace(/^\/+|\/+$/g,''));}catch(e){} if(view==='home')renderHome(); }
+function setObsMode(m){ try{localStorage.setItem('obsidian_mode',m);}catch(e){} if(view==='home')renderHome(); }
+/* 参照先テキスト（vault内のノート名＝ページ見出しラベル）を解決。基礎講座①〜⑩と特集（労一/雇用）を対象 */
+function obsLabel(item){
+  if(!item)return null;
+  if(item.src)return item.src;                                   // 給付など別テキスト由来（例: ④基礎講座_雇用保険法）
+  if(item.book==='ikuji')return '⑨基礎講座_労務管理その他の労働に関する一般常識'; // 育児介護特集は労一テキスト
+  const full=BOOKMAP[item.book]&&BOOKMAP[item.book].full;
+  return (full&&full.indexOf('基礎講座')>=0)?full:null;
+}
+function obsidianHref(item){
+  if(!item||typeof item.page!=='number')return null;
+  const label=obsLabel(item); if(!label)return null;
+  const v=obsVault(), vp=v?('vault='+encodeURIComponent(v)+'&'):'';
+  if(obsMode()==='adv'){                                         // Advanced URI で該当ページ見出しへ一発ジャンプ
+    const folder=obsFolder(); const fp=(folder?folder+'/':'')+label;
+    const heading='【'+label+' p.'+item.page+'】';
+    return 'obsidian://advanced-uri?'+vp+'filepath='+encodeURIComponent(fp)+'&heading='+encodeURIComponent(heading);
+  }
+  const q='"'+label+' p.'+item.page+'"';                        // フォールバック：見出し文字列をフレーズ検索
+  return 'obsidian://search?'+vp+'query='+encodeURIComponent(q);
+}
+/* 参照表示HTML（タップでObsidianの該当ページへ）。item/w 共通 */
+function refLine(item){
+  if(!item||typeof item.page!=='number')return '';
+  const txt='📖 '+(item.src||BOOKMAP[item.book].full)+' P.'+item.page;
+  const href=obsidianHref(item);
+  return href?('<a class="reflink" href="'+href+'">'+txt+' ↗</a>'):txt;
+}
+function obsCardHTML(){
+  const v=obsVault().replace(/"/g,'&quot;'), f=obsFolder().replace(/"/g,'&quot;'), adv=obsMode()==='adv';
+  return `<div class="studycard" style="margin-top:6px">
+    <div style="font-size:13px;font-weight:800;color:#e2e8f0;margin-bottom:6px">📕 Obsidian連携</div>
+    <div style="font-size:11.5px;color:#94a3b8;line-height:1.65;margin-bottom:9px">問題の「📖 参照ページ ↗」をタップ → Obsidianが<b style="color:#bae6fd">テキストの該当ページ</b>を開きます。一発ジャンプには<b style="color:#bae6fd">Advanced URI</b>プラグインが必要です（未導入なら「検索」を選択）。</div>
+    <div style="display:flex;gap:8px;margin-bottom:8px">
+      <input id="obsvaultinput" placeholder="Obsidianのvault名" value="${v}" autocapitalize="off" autocorrect="off" spellcheck="false" style="flex:1;min-width:0;background:#0f172a;border:1px solid var(--line);color:var(--txt);border-radius:10px;padding:10px 12px;font-size:14px">
+      <input id="obsfolderinput" placeholder="フォルダ名（任意）" value="${f}" autocapitalize="off" autocorrect="off" spellcheck="false" style="flex:1;min-width:0;background:#0f172a;border:1px solid var(--line);color:var(--txt);border-radius:10px;padding:10px 12px;font-size:14px">
+      <button class="stbtn" style="background:var(--maru);color:#fff" onclick="setObsConfig(document.getElementById('obsvaultinput').value,document.getElementById('obsfolderinput').value)">保存</button>
+    </div>
+    <div style="display:flex;gap:8px">
+      <button class="spbtn" style="margin-top:0;flex:1;${adv?'background:rgba(56,189,248,.2);border-color:#38bdf8;color:#bae6fd':''}" onclick="setObsMode('adv')">⚡ 一発ジャンプ${adv?'（選択中）':''}</button>
+      <button class="spbtn" style="margin-top:0;flex:1;${!adv?'background:rgba(56,189,248,.2);border-color:#38bdf8;color:#bae6fd':''}" onclick="setObsMode('search')">🔍 検索で開く${!adv?'（選択中）':''}</button>
+    </div>
+  </div>`;
+}
+
+/* ===== Firebase realtime sync ===== */
+const firebaseConfig={apiKey:"AIzaSyAdU1F-JtSC4j-wvqbaUJGTIosW6mOkEck",authDomain:"sharoushi-quiz-73790.firebaseapp.com",projectId:"sharoushi-quiz-73790",storageBucket:"sharoushi-quiz-73790.firebasestorage.app",messagingSenderId:"859893882829",appId:"1:859893882829:web:b2d05225c3c7acf6612e84"};
+let fbReady=false, syncDoc=null, unsub=null, pushTimer=null;
+function syncCode(){ try{return localStorage.getItem('sync_code')||'';}catch(e){return '';} }
+function setSyncCode(c){ c=(c||'').trim(); try{localStorage.setItem('sync_code',c);}catch(e){} connectSync(); if(view==='home')renderHome(); }
+function setSyncStatus(t,cls){ const el=document.getElementById('syncstatus'); if(el){ el.textContent=t; el.className='syncstatus '+(cls||''); } }
+function saveAll(){ save(); saveS(); }
+function softRerender(){ renderHeader(); if(!session){ if(view==='home')renderHome(); else if(view==='book'&&curTab==='stats')renderBookStats(); } }
+function initFirebase(){
+  if(typeof firebase==='undefined'){ setSyncStatus('SDK未読込','err'); return; }
+  try{
+    firebase.initializeApp(firebaseConfig);
+    firebase.auth().onAuthStateChanged(u=>{ if(u){ fbReady=true; connectSync(); } });
+    firebase.auth().signInAnonymously().catch(e=>setSyncStatus('認証エラー','err'));
+  }catch(e){ setSyncStatus('初期化エラー','err'); }
+}
+function connectSync(){
+  if(unsub){ unsub(); unsub=null; }
+  if(!fbReady){ return; }
+  const code=syncCode();
+  if(!code){ syncDoc=null; setSyncStatus('オフ',''); return; }
+  setSyncStatus('接続中…','');
+  try{
+    syncDoc=firebase.firestore().collection('sync').doc(code);
+    unsub=syncDoc.onSnapshot(snap=>{
+      setSyncStatus('● 同期中','ok');
+      if(!snap.exists){ pushNow(); return; }
+      const ch=mergeRemote(snap.data()||{});
+      if(ch){ saveAll(); softRerender(); pushNow(); }
+    }, err=>{ setSyncStatus('接続エラー','err'); });
+    pushNow();
+  }catch(e){ setSyncStatus('接続エラー','err'); }
+}
+function mergeRemote(d){
+  let ch=false;
+  if(d.perQ){ for(const id in d.perQ){ const inc=d.perQ[id]||{}, cur=H.perQ[id];
+    if(!cur){ H.perQ[id]={seen:inc.seen||0,correct:inc.correct||0,lastOK:(inc.lastOK==null?null:inc.lastOK),streak:inc.streak||0,ts:inc.ts||0}; ch=true; }
+    else { const ns=Math.max(cur.seen||0,inc.seen||0), nc=Math.max(cur.correct||0,inc.correct||0); if(ns!==(cur.seen||0)||nc!==(cur.correct||0)){ cur.seen=ns; cur.correct=nc; ch=true; }
+      if((inc.ts||0)>(cur.ts||0)){ cur.ts=inc.ts; if(inc.lastOK!=null)cur.lastOK=inc.lastOK; ch=true; } } } }
+  if(d.log){ for(const k in d.log){ const v=Math.max(S.log[k]||0, d.log[k]||0); if(v!==(S.log[k]||0)){ S.log[k]=v; ch=true; } } }
+  if(d.excluded){ for(const id in d.excluded){ if(d.excluded[id]&&!H.excluded[id]){ H.excluded[id]=1; ch=true; } } }
+  if(d.daily){ for(const k in d.daily){ const v=Math.max(S.daily[k]||0,d.daily[k]||0); if(v!==(S.daily[k]||0)){ S.daily[k]=v; ch=true; } } }
+  return ch;
+}
+function pushNow(){ if(!syncDoc) return; try{ flush(); syncDoc.set({perQ:H.perQ, log:S.log, excluded:H.excluded, daily:S.daily, ts:Date.now()},{merge:true}); }catch(e){} }
+function schedulePush(){ if(!syncDoc) return; clearTimeout(pushTimer); pushTimer=setTimeout(pushNow,1500); }
+
+/* ===== state ===== */
+let view='home', curBook=null, curTab=null, session=null;
+const main=document.getElementById('main');
+
+function goHome(){ view='home'; curBook=null; session=null; document.getElementById('homebtn').style.display='none';
+  document.getElementById('title').textContent='🔺 Delta Drill'; document.getElementById('tabbar').style.display='none'; renderHeader(); renderHome(); }
+function enterBook(id){ view='book'; curBook=id; session=null; document.getElementById('homebtn').style.display='inline-block';
+  document.getElementById('title').textContent=BOOKMAP[id].label; renderHeader();
+  if(id==='keisan'){ document.getElementById('tabbar').style.display='none'; renderCalcMenu(); return; }
+  selectTab('stats'); }
+
+/* ===== 日付・年号 計算ドリル ===== */
+function sei2war(y){ if(y>=2019)return '令和'+(y-2018); if(y>=1989)return '平成'+(y-1988); if(y>=1926)return '昭和'+(y-1925); if(y>=1912)return '大正'+(y-1911); return '明治'+(y-1867); }
+function rnd(a,b){ return a+Math.floor(Math.random()*(b-a+1)); }
+function genDays(){
+  const r=rnd(2,10), y=2018+r, m=rnd(1,12), d=rnd(1,28), N=rnd(10,200), after=Math.random()<0.7;
+  const base=new Date(y,m-1,d), res=new Date(base); res.setDate(res.getDate()+(after?N:-N));
+  const q='令和'+r+'年'+m+'月'+d+'日 の <b>'+N+'日'+(after?'後':'前')+'</b> は？';
+  const ans=sei2war(res.getFullYear())+'年'+(res.getMonth()+1)+'月'+res.getDate()+'日';
+  const exp='＝'+y+'/'+m+'/'+d+' の'+N+'日'+(after?'後':'前')+' → '+res.getFullYear()+'/'+(res.getMonth()+1)+'/'+res.getDate()+'。月の大小（4・6・9・11月＝30日、2月＝28/29日）に注意。「◯日後」は＋'+N+'日（起算日は数えない）。';
+  return {mode:'sentaku',book:'keisan',law:'計算',cat:'日数',q,answer:ans,exp,page:null};
+}
+function genSpan(){
+  const r=rnd(2,10), y=2018+r, m=rnd(1,11), d=rnd(1,20); const N=rnd(20,150);
+  const a=new Date(y,m-1,d), b=new Date(a); b.setDate(b.getDate()+N);
+  const q='令和'+r+'年'+m+'月'+d+'日 から 令和'+r+'年'+(b.getMonth()+1)+'月'+b.getDate()+'日 までは <b>何日間</b>？（初日を算入）';
+  const ans=(N+1)+'日間';
+  const exp='両端を含めると差の日数＋1。'+m+'/'+d+'〜'+(b.getMonth()+1)+'/'+b.getDate()+' は '+N+'日差 → 初日算入で '+(N+1)+'日間。';
+  return {mode:'sentaku',book:'keisan',law:'計算',cat:'期間',q,answer:ans,exp,page:null};
+}
+function safeY(y){ return y!==1989 && y!==2019 && y>=1927 && y<=2033; }
+function genEra(){
+  const t=rnd(1,4);
+  if(t===1){ // 和暦→西暦
+    const eras=[['昭和',1925,30,63],['平成',1988,2,30],['令和',2018,2,12]]; const e=eras[rnd(0,2)];
+    const yy=rnd(e[2],e[3]); const sei=e[1]+yy;
+    return {mode:'sentaku',book:'keisan',law:'計算',cat:'和暦→西暦',q:e[0]+yy+'年 は西暦何年？',answer:'西暦'+sei+'年',
+      exp:e[0]+'＋'+e[1]+'＝西暦。'+e[0]+yy+'＝'+e[1]+'＋'+yy+'＝'+sei+'年。（昭和＋1925／平成＋1988／令和＋2018）',page:null};
+  }
+  if(t===2){ // 西暦→和暦
+    let sei; do{ sei=rnd(1955,2030); }while(!safeY(sei));
+    return {mode:'sentaku',book:'keisan',law:'計算',cat:'西暦→和暦',q:'西暦'+sei+'年 は和暦で？',answer:sei2war(sei)+'年',
+      exp:'西暦'+sei+'＝'+sei2war(sei)+'年。（〜1988=昭和-1925／1989〜2018=平成-1988／2019〜=令和-2018）',page:null};
+  }
+  if(t===3){ // N年前後
+    let sei,N,dir,res; let g=0;
+    do{ sei=rnd(1960,2025); N=rnd(5,40); dir=Math.random()<0.5?1:-1; res=sei+dir*N; g++; }while((!safeY(sei)||!safeY(res))&&g<50);
+    const startW=sei2war(sei)+'年', resW=sei2war(res)+'年';
+    return {mode:'sentaku',book:'keisan',law:'計算',cat:'◯年前後',q:startW+' の <b>'+N+'年'+(dir>0?'後':'前')+'</b> は？（和暦で）',answer:resW,
+      exp:startW+'＝西暦'+sei+'年 →'+N+'年'+(dir>0?'後':'前')+'＝西暦'+res+'年＝'+resW+'。年号をまたぐので一度西暦に直すと確実。',page:null};
+  }
+  // 年齢
+  const by=rnd(1955,2005), ref=2026, age=ref-by;
+  return {mode:'sentaku',book:'keisan',law:'計算',cat:'年齢',q:sei2war(by)+'年生まれの人は、令和8年（誕生日到来後）で<b>満何歳</b>？',answer:'満'+age+'歳',
+    exp:sei2war(by)+'年＝西暦'+by+'年。2026−'+by+'＝'+age+'歳。（誕生日前なら−1歳）',page:null};
+}
+function fmtW(d){ return sei2war(d.getFullYear())+'年'+(d.getMonth()+1)+'月'+d.getDate()+'日'; }
+function genStartRule(){
+  const t=rnd(1,4);
+  if(t===1){ // 年齢到達日（誕生日の前日）
+    const ages=[60,64,65,70,75], A=ages[rnd(0,4)], by=rnd(1955,2000), m=rnd(1,12), d=rnd(1,28);
+    const reach=new Date(by+A,m-1,d); reach.setDate(reach.getDate()-1);
+    return {mode:'sentaku',book:'keisan',law:'計算',cat:'年齢到達日',q:sei2war(by)+'年'+m+'月'+d+'日 生まれの人が <b>満'+A+'歳に達する日</b> は？',answer:fmtW(reach),
+      exp:'「年齢計算ニ関スル法律」により年齢は誕生日の<b>前日</b>に加わる。'+(by+A)+'/'+m+'/'+d+' の前日＝'+fmtW(reach)+'。（例:4/1生まれは3/31に達する→学年・被保険者資格の判定で重要）',page:null};
+  }
+  if(t===2||t===3){ // 翌日から起算して◯か月/週を経過する日
+    const r=rnd(2,10),y=2018+r,m=rnd(1,12),d=rnd(1,27); const ki=new Date(y,m-1,d); ki.setDate(ki.getDate()+1);
+    let res,unitTxt;
+    if(t===2){ const N=[1,2,3,6][rnd(0,3)]; const ou=new Date(ki); ou.setMonth(ou.getMonth()+N); res=new Date(ou); res.setDate(res.getDate()-1); unitTxt=N+'か月'; }
+    else { const N=rnd(1,3); res=new Date(ki); res.setDate(res.getDate()+7*N-1); unitTxt=N+'週間'; }
+    return {mode:'sentaku',book:'keisan',law:'計算',cat:'翌日起算',q:'令和'+r+'年'+m+'月'+d+'日 を基準に、<b>その翌日から起算して'+unitTxt+'を経過する日</b> は？',answer:fmtW(res),
+      exp:m+'/'+d+'の翌日を起算日とし、'+unitTxt+'後の応当日の<b>前日</b>が「経過する日」→'+fmtW(res)+'。（「経過した日」はさらにその翌日）',page:null};
+  }
+  // 資格喪失日（退職日の翌日）
+  const r=rnd(2,10),y=2018+r,m=rnd(1,12),d=rnd(1,28); const loss=new Date(y,m-1,d); loss.setDate(loss.getDate()+1);
+  return {mode:'sentaku',book:'keisan',law:'計算',cat:'資格喪失日',q:'令和'+r+'年'+m+'月'+d+'日 に退職した場合、健康保険・厚生年金保険の <b>被保険者資格を喪失する日</b> は？',answer:fmtW(loss),
+    exp:'資格喪失は「事実のあった日（退職日）の<b>翌日</b>」。'+m+'/'+d+'退職→'+fmtW(loss)+'喪失。（保険料は資格喪失日の属する月の"前月"分まで徴収）',page:null};
+}
+function genCalc(type,n){ const out=[]; for(let i=0;i<n;i++){ if(type==='days')out.push(Math.random()<0.75?genDays():genSpan()); else if(type==='era')out.push(genEra()); else if(type==='rule')out.push(genStartRule()); else { const r=Math.random(); out.push(r<0.3?genDays():(r<0.45?genSpan():(r<0.7?genEra():genStartRule()))); } } return out; }
+function renderCalcMenu(){
+  document.getElementById('tabbar').style.display='none';
+  main.innerHTML=`<div class="home">
+    <div class="studycard">
+      <div style="font-size:14px;font-weight:800;color:#e2e8f0;margin-bottom:6px">📅 日付・年号 計算ドリル</div>
+      <div style="font-size:11.5px;color:#94a3b8;line-height:1.7;margin-bottom:12px">毎回ランダム出題。答えを思い浮かべて「答えを見る」→自己採点（記録は残りません）。社労士は<b style="color:#bae6fd">日数（◯日後・93日等）</b>と<b style="color:#bae6fd">和暦⇄西暦・◯年前後・年齢</b>の計算が頻出です。</div>
+      <button class="crossbtn all" style="width:100%;margin-bottom:10px" onclick="startSession(genCalc('days',20),'📆 日数計算',{type:'book',book:'keisan'})">📆 日数計算（◯日後/前・期間）20問</button>
+      <button class="crossbtn all" style="width:100%;margin-bottom:10px;background:var(--gold);color:#3a2c05" onclick="startSession(genCalc('era',20),'🗓 年号計算',{type:'book',book:'keisan'})">🗓 年号計算（和暦⇄西暦・◯年前後・年齢）20問</button>
+      <button class="crossbtn" style="width:100%;margin-bottom:10px;background:#7c3aed;color:#fff" onclick="startSession(genCalc('rule',20),'⚖️ 起算日ルール',{type:'book',book:'keisan'})">⚖️ 社労士の起算日ルール（年齢到達日・翌日起算・資格喪失）20問</button>
+      <button class="crossbtn weak" style="width:100%" onclick="startSession(genCalc('mix',20),'🎲 計算ミックス',{type:'book',book:'keisan'})">🎲 ミックス20問</button>
+    </div></div>`;
+}
+
+function renderHeader(){
+  const o=statOf(QUESTIONS);
+  document.getElementById('hstat').innerHTML = o.seen
+    ? `累計 <b>${o.seen}</b>問 ・ 正答率 <b>${Math.round(o.acc*100)}%</b> ・ 出題済 <b>${o.distinct}/${o.total}</b>`
+    : `まだ回答履歴がありません。冊子を選んで始めましょう 👇`;
+  renderTimerChip();
+}
+
+/* ===== home (本棚) ===== */
+function renderHome(){
+  let html='<div class="home">';
+  html+=planCardHTML();
+  html+=studyCardHTML();
+  html+=`<div class="crossbtns">
+    <button class="crossbtn all" onclick="startSession(orderStudy(QUESTIONS,50),'📚 全科目 学習',{type:'global'})">📚 全科目 学習(50)</button>
+    <button class="crossbtn weak" onclick="startWeak({type:'global'})">⭐ 苦手克服</button></div>`;
+  const o=statOf(QUESTIONS);
+  html+=`<div class="ov">
+    <div class="ovcard"><div class="ovnum">${o.distinct}<span style="font-size:13px;color:#64748b">/${o.total}</span></div><div class="ovlbl">出題済</div></div>
+    <div class="ovcard"><div class="ovnum">${o.seen}</div><div class="ovlbl">累計回答</div></div>
+    <div class="ovcard"><div class="ovnum">${o.acc!==null?Math.round(o.acc*100)+'%':'—'}</div><div class="ovlbl">正答率</div></div></div>`;
+  html+='<div class="shelf">';
+  BOOKS.forEach((b,i)=>{
+    if(b.id==='keisan'){
+      html+=`<div class="book" onclick="enterBook('keisan')">
+        <div class="bnum">${b.no}</div>
+        <div class="bname">${b.label}</div>
+        <span class="bbadge badge good">∞ドリル</span>
+        <div class="bsub" style="margin-top:9px">毎回ランダム出題<br>日数・和暦⇄西暦・年齢</div>
+      </div>`; return;
+    }
+    const s=statOf(byBook[b.id]); const col=accColor(s.acc);
+    let badge=s.seen===0?'<span class="bbadge badge none">未着手</span>'
+      :s.acc>=0.8?'<span class="bbadge badge good">得意</span>'
+      :(s.seen>=3&&s.acc<0.6)?'<span class="bbadge badge weak">苦手</span>':'';
+    html+=`<div class="book" onclick="enterBook('${b.id}')">
+      <div class="bnum">${b.no}</div>
+      <div class="bname">${b.label}</div>
+      ${badge}
+      <div class="bbar"><div style="width:${s.acc!==null?s.acc*100:0}%;background:${col}"></div></div>
+      <div class="bsub">${b.total}問 ・ 出題 ${s.distinct}/${s.total}${s.acc!==null?' ・ '+Math.round(s.acc*100)+'%':''}</div>
+    </div>`;
+  });
+  html+='</div>'+syncCardHTML()+obsCardHTML()+'</div>';
+  main.innerHTML=html;
+}
+
+/* ===== book tabs ===== */
+function renderTabs(){
+  const tb=document.getElementById('tabbar'); tb.style.display='flex'; tb.innerHTML='';
+  const specs=[['stats','📊 成績'],['weak','⭐ 苦手'],['all','🎲 総合（択一）']];
+  if(hasSentaku(curBook)) specs.push(['sentaku','📝 選択']);
+  const exn=excludedList(curBook).length; if(exn>0) specs.push(['excluded','🚫 除外('+exn+')']);
+  specs.forEach(([k,label])=>{
+    const el=document.createElement('div'); el.className='tab special'+(curTab===k?' active':''); el.textContent=label; el.onclick=()=>selectTab(k); tb.appendChild(el);
+  });
+  lawOrder[curBook].forEach(law=>{
+    const el=document.createElement('div'); el.className='tab'+(curTab===law?' active':'');
+    el.innerHTML=`${law}<span class="cnt">${byBookLaw[curBook][law].length}</span>`; el.onclick=()=>selectTab(law); tb.appendChild(el);
+  });
+}
+function selectTab(k){
+  curTab=k; renderTabs();
+  if(k==='stats'){ session=null; renderBookStats(); }
+  else if(k==='weak'){ startWeak({type:'book',book:curBook}); }
+  else if(k==='excluded'){ const ex=shuffle(excludedList(curBook)); if(!ex.length){ renderEmptyExcluded(); } else startSession(ex,'🚫 '+BOOKMAP[curBook].label+' 除外',{type:'book',book:curBook},true); }
+  else if(k==='all'){ startSession(orderStudy(byBook[curBook],50),'📚 '+BOOKMAP[curBook].label+' 総合（未回答→復習優先）',{type:'book',book:curBook}); }
+  else if(k==='sentaku'){ startSession(orderStudy(byBookS[curBook]),'📝 '+BOOKMAP[curBook].label+' 選択',{type:'book',book:curBook}); }
+  else { startSession(orderStudy(byBookLaw[curBook][k]),k,{type:'book',book:curBook}); }
+}
+
+/* ===== weak ===== */
+function weakPool(pool){
+  pool=pool.filter(q=>!isExcluded(q.id));
+  const wrong=pool.filter(q=>H.perQ[q.id]&&H.perQ[q.id].lastOK===false);
+  // group by law to find weak laws
+  const grp={}; pool.forEach(q=>{(grp[q.book+'|'+q.law]=grp[q.book+'|'+q.law]||[]).push(q);});
+  let fromWeakLaws=[];
+  Object.values(grp).forEach(g=>{ const s=statOf(g); if(s.seen>=3&&s.acc<0.7){ fromWeakLaws=fromWeakLaws.concat(g.filter(q=>!(H.perQ[q.id]&&H.perQ[q.id].lastOK===true))); } });
+  const ids=new Set(),out=[];
+  [...wrong,...fromWeakLaws].forEach(q=>{if(!ids.has(q.id)){ids.add(q.id);out.push(q);}});
+  return shuffle(out).slice(0,25);
+}
+function startWeak(scope){
+  const pool=scope.type==='global'?QUESTIONS:byBook[scope.book];
+  const list=weakPool(pool);
+  if(!list.length){ renderEmptyWeak(scope); return; }
+  startSession(list, (scope.type==='global'?'⭐ 全科目の苦手':'⭐ '+BOOKMAP[scope.book].label+' 苦手'), scope);
+}
+function renderEmptyWeak(scope){
+  main.innerHTML=`<div class="empty">⭐ まだ苦手データがありません。<br>${scope.type==='global'?'各冊を解く':'この科目を解く'}と、間違えた問題や正答率の低い分野が<br>ここに集まり、集中的に復習できます。</div>`;
+}
+function renderEmptyExcluded(){
+  main.innerHTML=`<div class="empty">🚫 除外した問題はありません。<br>各問題の回答後に「🚫 除外」を押すと、ここに入り通常出題から外れます。<br>除外タブで解き直して、あやふやなら「↩︎ 復活」で戻せます。</div>`;
+}
+
+/* ===== session ===== */
+function startSession(list,title,scope,excludeMode){ if(!list||!list.length){ alert('対象の問題がありません。'); return; }
+  if(!timer.running){ timer.running=true; timer.startTs=Date.now(); renderTimerChip(); } /* 演習開始で自動計測 */
+  session={list,title,idx:0,score:0,wrong:[],scope,excludeMode:!!excludeMode}; renderCard(); }
+function renderCard(){
+  const s=session,item=s.list[s.idx];
+  if(item.mode==='sentaku'){ return renderSentakuCard(); }
+  main.innerHTML=`
+    <div class="qhead"><span id="tdg">📅 本日 <b style="color:${todayCount()>=DAILY_GOAL?'#86efac':'var(--gold)'}">${todayCount()}</b>/${DAILY_GOAL}問${todayCount()>=DAILY_GOAL?' 🎉':''}</span><span class="qright"><span class="remain">残り${s.list.length-s.idx-1}問</span>正解 <b>${s.score}</b><button class="stopbtn" onclick="stopSession()">■ 中断</button></span></div>
+    <div class="barwrap"><div class="bar" style="width:${s.idx/s.list.length*100}%"></div></div>
+    <div class="card">
+      <div class="tag">${BOOKMAP[item.book].label}・${item.law}${item.w>=3?' <span class="hot">🔥頻出</span>':''}</div>
+      <div class="q">${item.q}</div>
+      <div class="btns" id="btns">
+        <button class="btn maru" onclick="answer(true)">⚪︎<small>正しい</small></button>
+        <button class="btn batsu" onclick="answer(false)">✕<small>誤り</small></button>
+      </div>
+      <div class="feedback" id="fb">
+        <div class="verdict" id="vd"></div>
+        <div class="ansline">正解：<b id="ca"></b></div>
+        <div class="exp" id="exp"></div>
+        ${item.detail?`<div class="detail">📖 テキスト解説<br>${item.detail}</div>`:''}
+        <div class="ref" id="ref"></div>
+        <button class="next" id="nx"></button>
+        ${item.id?`<button class="exbtn" onclick="${s.excludeMode?'reviveCur()':'excludeCur()'}">${s.excludeMode?'↩︎ 復活（通常出題に戻す）':'🚫 この問題を除外（もう出さない）'}</button>`:''}
+      </div>
+    </div>`;
+}
+function answer(choice){
+  const s=session,item=s.list[s.idx],ok=(choice===item.a);
+  rec(item.id,ok); bumpDaily(); renderTdg(); if(ok)s.score++; else s.wrong.push(item);
+  document.getElementById('btns').style.display='none';
+  const vd=document.getElementById('vd'); vd.className='verdict '+(ok?'ok':'ng'); vd.innerHTML=ok?'⭕ 正解！':'❌ 不正解…';
+  if(ok && !s.excludeMode && item.id && H.perQ[item.id] && H.perQ[item.id].streak===3){ vd.innerHTML+=' <span class="autoex">🎉 3回連続正解 → 自動で除外しました</span>'; }
+  document.getElementById('ca').textContent=item.a?'⚪︎（正しい）':'✕（誤り）';
+  document.getElementById('exp').innerHTML=item.exp;
+  document.getElementById('ref').innerHTML=refLine(item);
+  document.getElementById('fb').style.display='block';
+  const nx=document.getElementById('nx'); nx.textContent=(s.idx===s.list.length-1)?'結果を見る →':'次の問題 →'; nx.onclick=next;
+  renderHeader();
+}
+function next(){ const s=session; s.idx++; if(s.idx>=s.list.length){endSession();} else renderCard(); }
+function makeBlank(text){
+  const kws=[]; let m; const re=/【([^】]+)】/g; while((m=re.exec(text))!==null)kws.push(m[1]);
+  if(!kws.length) return {q:text,answer:'—',full:text};
+  const nb=kws.length>=4?(Math.random()<0.4?2:1):1;
+  const chosen=shuffle(kws.map((_,i)=>i)).slice(0,nb).sort((a,b)=>a-b);
+  const numbered=chosen.length>1; const ans=[]; let c=0,bn=0;
+  const q=text.replace(/【([^】]+)】/g,(w,kw)=>{ const pick=chosen.includes(c); c++; if(pick){ bn++; ans.push((numbered?('('+bn+') '):'')+kw); return numbered?('〔　？'+bn+'　〕'):'〔　？　〕'; } return kw; });
+  c=0; const full=text.replace(/【([^】]+)】/g,(w,kw)=>{ const pick=chosen.includes(c); c++; return pick?('<b>'+kw+'</b>'):kw; });
+  return {q,answer:ans.join(' ／ '),full};
+}
+function hasChoiceFmt(text){ return !!text && /【[^】]*\|[^】]*】/.test(text); }
+function makeBlankChoice(text){
+  const items=[]; let m; const re=/【([^】]+)】/g;
+  while((m=re.exec(text))!==null){ const p=m[1].split('|').map(x=>x.trim()).filter(Boolean); items.push({correct:p[0], dist:p.slice(1)}); }
+  const cand=items.map((it,i)=>i).filter(i=>items[i].dist.length>0);
+  const pool=cand.length?cand:items.map((_,i)=>i);
+  const pick=pool[Math.floor(Math.random()*pool.length)];
+  let c=0; const q=text.replace(/【([^】]+)】/g,(w,inner)=>{ const cur=c++; const correct=inner.split('|')[0].trim(); return cur===pick?'〔　？　〕':correct; });
+  c=0; const full=text.replace(/【([^】]+)】/g,(w,inner)=>{ const cur=c++; const correct=inner.split('|')[0].trim(); return cur===pick?('<b>'+correct+'</b>'):correct; });
+  const ch=items[pick]; let choices=shuffle([ch.correct, ...ch.dist].slice(0,4));
+  return {q, choices, answer:ch.correct, full};
+}
+function renderSentakuCard(){
+  const s=session,item=s.list[s.idx];
+  const head=`
+    <div class="qhead"><span id="tdg">📅 本日 <b style="color:${todayCount()>=DAILY_GOAL?'#86efac':'var(--gold)'}">${todayCount()}</b>/${DAILY_GOAL}問${todayCount()>=DAILY_GOAL?' 🎉':''}</span><span class="qright"><span class="remain">残り${s.list.length-s.idx-1}問</span>正解 <b>${s.score}</b><button class="stopbtn" onclick="stopSession()">■ 中断</button></span></div>
+    <div class="barwrap"><div class="bar" style="width:${s.idx/s.list.length*100}%"></div></div>`;
+  const tag=`<div class="tag">${BOOKMAP[item.book].label}・${item.law}${item.w>=3?' <span class="hot">🔥頻出</span>':''} <span style="color:var(--gold)">${item.book==='keisan'?'計算ドリル':'選択式'}</span></div>`;
+  const exbtn=item.id?`<button class="exbtn" onclick="${s.excludeMode?'reviveCur()':'excludeCur()'}">${s.excludeMode?'↩︎ 復活（通常出題に戻す）':'🚫 この問題を除外（もう出さない）'}</button>`:'';
+  const refhtml=refLine(item);
+  const nxLabel=(s.idx===s.list.length-1)?'結果を見る →':'次の問題 →';
+  if(hasChoiceFmt(item.text)){
+    const r=makeBlankChoice(item.text); s.cur=r;
+    main.innerHTML=`${head}<div class="card">${tag}
+      <div class="q">${r.q}</div>
+      <div class="choices" id="choices">${r.choices.map((c,i)=>'<button class="choice" onclick="chooseAns('+i+')">'+c+'</button>').join('')}</div>
+      <div class="feedback" id="fb">
+        <div class="verdict" id="vd"></div>
+        <div class="sans">正解：<b>${r.answer}</b></div>
+        <div class="detail" style="border-left-color:var(--gold)">${r.full}</div>
+        ${item.exp?`<div class="exp">${item.exp}</div>`:''}
+        <div class="ref">${refhtml}</div>
+        <button class="next" id="nx" onclick="next()">${nxLabel}</button>
+        ${exbtn}
+      </div>
+    </div>`;
+    return;
+  }
+  let qhtml,ans,full;
+  if(item.text){ const r=makeBlank(item.text); qhtml=r.q; ans=r.answer; full=r.full; } else { qhtml=item.q; ans=item.answer; full=null; }
+  main.innerHTML=`${head}<div class="card">${tag}
+      <div class="q">${qhtml}</div>
+      <div class="btns" id="btns"><button class="next" style="background:var(--gold);color:#3a2c05" onclick="revealS()">答えを見る 👀</button></div>
+      <div class="feedback" id="fb">
+        <div class="sans">空所の答え：<b>${ans}</b></div>
+        ${full?`<div class="detail" style="border-left-color:var(--gold)">${full}</div>`:''}
+        ${item.exp?`<div class="exp">${item.exp}</div>`:''}
+        <div class="ref">${refhtml}</div>
+        <div class="gradebtns">
+          <button class="grade ng" onclick="gradeS(false)">❌ あやふや</button>
+          <button class="grade ok" onclick="gradeS(true)">⭕ 覚えてた</button>
+        </div>
+        ${exbtn}
+      </div>
+    </div>`;
+}
+function revealS(){ const b=document.getElementById('btns'); if(b)b.style.display='none'; const f=document.getElementById('fb'); if(f)f.style.display='block'; }
+function chooseAns(i){
+  const s=session,item=s.list[s.idx],r=s.cur; if(!r)return; const ok=(r.choices[i]===r.answer);
+  rec(item.id,ok); bumpDaily(); renderTdg(); if(ok)s.score++; else s.wrong.push(item);
+  const cont=document.getElementById('choices');
+  if(cont){ const bs=cont.querySelectorAll('button'); bs.forEach((b,bi)=>{ b.disabled=true; if(r.choices[bi]===r.answer)b.classList.add('ok'); else if(bi===i)b.classList.add('ng'); }); }
+  const vd=document.getElementById('vd'); if(vd){ vd.className='verdict '+(ok?'ok':'ng'); vd.innerHTML=ok?'⭕ 正解！':'❌ 不正解…';
+    if(ok&&!s.excludeMode&&item.id&&H.perQ[item.id]&&H.perQ[item.id].streak===3){ vd.innerHTML+=' <span class="autoex">🎉 3回連続正解 → 自動で除外しました</span>'; } }
+  const fb=document.getElementById('fb'); if(fb)fb.style.display='block';
+  renderHeader();
+}
+function gradeS(ok){ const s=session,item=s.list[s.idx]; rec(item.id,ok); bumpDaily(); renderTdg(); if(ok)s.score++; else s.wrong.push(item); renderHeader(); next(); }
+function stopSession(){ const s=session; if(s&&s.idx>0&&s.idx<s.list.length){ if(!confirm(`ここまで ${s.idx}問 回答しました（履歴は保存済み）。中断しますか？`))return; } if(timer.running)stopStudy(); backFromSession(); }
+function backFromSession(){ session=null; if(view==='home'){ goHome(); } else { selectTab('stats'); } }
+function endSession(){
+  const s=session,pct=s.score/s.list.length;
+  let grade,msg;
+  if(pct===1){grade='🏆 パーフェクト！';msg='全問正解。完璧です！';}
+  else if(pct>=0.85){grade='🌸 合格圏';msg='よく仕上がっています。間違えた論点だけ詰めましょう。';}
+  else if(pct>=0.6){grade='📖 あと一歩';msg='苦手タブで弱点を重点復習しましょう。';}
+  else{grade='💪 復習しよう';msg='テキストを読み直してから再挑戦を。';}
+  let wlist='';
+  if(s.wrong.length){ wlist='<div class="stitle" style="margin-top:14px">❌ 復習ポイント</div>'+
+    s.wrong.map(w=>`<div class="lrow" style="cursor:default"><div class="lname" style="font-size:13px">${BOOKMAP[w.book].label}・${w.law}</div><div class="lsub" style="color:#cbd5e1">${w.exp}</div><div class="ref">${refLine(w)}</div></div>`).join(''); }
+  const sc=s.scope;
+  const again = sc.type==='global'?`goHome()`:`enterBook('${sc.book}')`;
+  main.innerHTML=`
+    <div class="sresult" style="display:flex">
+      <div style="color:var(--sub);font-size:13px">${s.title} の結果</div>
+      <div class="scorebig">${s.score}<span> / ${s.list.length}</span></div>
+      <div class="grade">${grade}</div><div class="gmsg">${msg}</div>
+      <div class="rbtns">
+        <button class="rbtn primary" onclick="${again}">↩︎ 戻る</button>
+        <button class="rbtn ghost" onclick="goHome()">📚 本棚へ</button>
+      </div>${wlist}
+    </div>`;
+  renderHeader();
+}
+
+/* ===== book stats ===== */
+function renderBookStats(){
+  const o=statOf(byBook[curBook]);
+  const rows=lawOrder[curBook].map(law=>({law,...statOf(byBookLaw[curBook][law])}));
+  rows.sort((a,b)=>{ if(a.seen===0&&b.seen===0)return 0; if(a.seen===0)return 1; if(b.seen===0)return -1; return a.acc-b.acc; });
+  let html=`<div class="stats">
+    <div class="ov">
+      <div class="ovcard"><div class="ovnum">${o.distinct}<span style="font-size:13px;color:#64748b">/${o.total}</span></div><div class="ovlbl">出題済</div></div>
+      <div class="ovcard"><div class="ovnum">${o.seen}</div><div class="ovlbl">累計回答</div></div>
+      <div class="ovcard"><div class="ovnum">${o.acc!==null?Math.round(o.acc*100)+'%':'—'}</div><div class="ovlbl">正答率</div></div>
+    </div>
+    <div class="stitle"><span>章別の成績（タップで演習開始）</span><span style="font-weight:600">弱い順</span></div>`;
+  rows.forEach(r=>{
+    let badge=r.seen===0?'<span class="badge none">未着手</span>':r.acc>=0.8?'<span class="badge good">得意</span>':(r.seen>=3&&r.acc<0.6)?'<span class="badge weak">苦手</span>':'';
+    const pct=r.acc!==null?Math.round(r.acc*100)+'%':'—';
+    html+=`<div class="lrow" onclick="selectTab('${r.law.replace(/'/g,"\\'")}')">
+      <div class="lname"><span>${r.law}${qw(curBook,r.law)>=3?' <span class="hot">🔥</span>':''}${badge}</span><span class="pct" style="color:${accColor(r.acc)}">${pct}</span></div>
+      <div class="lbar"><div style="width:${r.acc!==null?r.acc*100:0}%;background:${accColor(r.acc)}"></div></div>
+      <div class="lsub">出題 ${r.distinct}/${r.total} ・ 回答 ${r.seen} ・ 正解 ${r.correct}</div></div>`;
+  });
+  html+=`<button class="resetbtn" onclick="resetHist()">🗑 全科目の履歴をリセット</button></div>`;
+  main.innerHTML=html;
+}
+function resetHist(){ if(confirm('全科目の回答履歴をすべて消去します。よろしいですか？')){ H={perQ:{}}; save(); renderHeader(); if(view==='book')renderBookStats(); else renderHome(); } }
+
+/* init */
+document.getElementById('importfile').addEventListener('change',function(e){
+  const f=e.target.files&&e.target.files[0]; if(!f){return;}
+  const r=new FileReader();
+  r.onload=function(){ try{ applyImport(JSON.parse(r.result)); }catch(err){ alert('読み込みに失敗しました（ファイル形式が不正です）。'); } e.target.value=''; };
+  r.readAsText(f);
+});
+goHome();
+initFirebase();
+</script>
+</body>
+</html>

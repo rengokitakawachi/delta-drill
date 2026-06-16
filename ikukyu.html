@@ -1,0 +1,228 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>育児休業 ○×確認問題</title>
+<style>
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  :root{
+    --bg:#0f172a; --card:#1e293b; --card2:#273449;
+    --txt:#e2e8f0; --sub:#94a3b8; --line:#334155;
+    --ok:#22c55e; --okbg:#14361f; --ng:#ef4444; --ngbg:#3a1717;
+    --acc:#38bdf8; --maru:#3b82f6; --batsu:#f43f5e;
+    --gold:#fbbf24;
+  }
+  html,body{margin:0;padding:0;background:var(--bg);color:var(--txt);
+    font-family:-apple-system,BlinkMacSystemFont,"Hiragino Kaku Gothic ProN","Yu Gothic",Meiryo,sans-serif;}
+  .wrap{max-width:560px;margin:0 auto;min-height:100vh;display:flex;flex-direction:column;padding:16px;}
+  header{text-align:center;padding:8px 0 4px;}
+  header h1{font-size:18px;margin:0 0 10px;letter-spacing:.5px;}
+  .barwrap{height:8px;background:var(--line);border-radius:99px;overflow:hidden;}
+  .bar{height:100%;width:0;background:linear-gradient(90deg,var(--acc),var(--maru));transition:width .35s ease;}
+  .meta{display:flex;justify-content:space-between;font-size:13px;color:var(--sub);margin-top:8px;}
+  .meta b{color:var(--txt);}
+
+  .card{background:var(--card);border:1px solid var(--line);border-radius:20px;
+    padding:22px 20px;margin-top:18px;flex:1;display:flex;flex-direction:column;
+    box-shadow:0 10px 30px rgba(0,0,0,.35);}
+  .tag{align-self:flex-start;font-size:12px;font-weight:700;color:var(--acc);
+    background:rgba(56,189,248,.12);border:1px solid rgba(56,189,248,.3);
+    padding:4px 10px;border-radius:99px;margin-bottom:14px;}
+  .qno{font-size:13px;color:var(--sub);margin-bottom:6px;}
+  .q{font-size:19px;line-height:1.7;font-weight:600;flex:1;}
+
+  .btns{display:flex;gap:14px;margin-top:18px;}
+  .btn{flex:1;border:none;border-radius:18px;padding:20px 0;font-size:30px;font-weight:800;
+    color:#fff;cursor:pointer;transition:transform .08s,filter .2s;user-select:none;}
+  .btn:active{transform:scale(.95);}
+  .maru{background:linear-gradient(160deg,#3b82f6,#2563eb);}
+  .batsu{background:linear-gradient(160deg,#f43f5e,#e11d48);}
+  .btn small{display:block;font-size:12px;font-weight:600;opacity:.85;margin-top:2px;}
+
+  .feedback{margin-top:18px;display:none;animation:pop .25s ease;}
+  @keyframes pop{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
+  .verdict{font-size:20px;font-weight:800;display:flex;align-items:center;gap:8px;padding:12px 14px;border-radius:14px;}
+  .verdict.ok{background:var(--okbg);color:#86efac;border:1px solid rgba(34,197,94,.4);}
+  .verdict.ng{background:var(--ngbg);color:#fca5a5;border:1px solid rgba(239,68,68,.4);}
+  .ansline{font-size:14px;color:var(--sub);margin:12px 2px 4px;}
+  .ansline b{color:var(--txt);}
+  .exp{background:var(--card2);border:1px solid var(--line);border-radius:14px;
+    padding:14px 16px;font-size:15px;line-height:1.75;margin-top:6px;}
+  .next{width:100%;margin-top:16px;padding:16px;border:none;border-radius:16px;
+    background:var(--acc);color:#06283d;font-size:17px;font-weight:800;cursor:pointer;}
+  .next:active{transform:scale(.98);}
+
+  /* result */
+  .result{display:none;text-align:center;padding:10px 4px 30px;flex:1;flex-direction:column;justify-content:center;}
+  .scorebig{font-size:60px;font-weight:900;color:var(--gold);margin:6px 0;}
+  .scorebig span{font-size:26px;color:var(--sub);}
+  .grade{font-size:22px;font-weight:800;margin:6px 0 4px;}
+  .gmsg{color:var(--sub);font-size:15px;line-height:1.7;margin-bottom:18px;}
+  .review{text-align:left;background:var(--card);border:1px solid var(--line);border-radius:16px;padding:14px 16px;margin:0 0 18px;}
+  .review h3{margin:0 0 10px;font-size:14px;color:var(--ng);}
+  .review.allok h3{color:var(--ok);}
+  .ritem{font-size:14px;line-height:1.6;padding:8px 0;border-top:1px dashed var(--line);color:var(--sub);}
+  .ritem:first-of-type{border-top:none;}
+  .ritem b{color:var(--txt);}
+  .actions{display:flex;gap:12px;flex-direction:column;}
+  .rbtn{padding:15px;border:none;border-radius:14px;font-size:16px;font-weight:800;cursor:pointer;}
+  .rbtn.primary{background:var(--maru);color:#fff;}
+  .rbtn.ghost{background:transparent;border:1px solid var(--line);color:var(--txt);}
+  footer{text-align:center;color:#475569;font-size:11px;padding:14px 0 4px;}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>🍼 育児休業 ○×確認問題</h1>
+    <div class="barwrap"><div class="bar" id="bar"></div></div>
+    <div class="meta"><span>第 <b id="cur">1</b> / <span id="total">14</span> 問</span><span>正解 <b id="score">0</b></span></div>
+  </header>
+
+  <!-- QUIZ CARD -->
+  <div class="card" id="card">
+    <div class="tag" id="tag">labor</div>
+    <div class="qno" id="qno">Q1</div>
+    <div class="q" id="qtext">...</div>
+
+    <div class="btns" id="btns">
+      <button class="btn maru" onclick="answer(true)">⚪︎<small>正しい</small></button>
+      <button class="btn batsu" onclick="answer(false)">✕<small>誤り</small></button>
+    </div>
+
+    <div class="feedback" id="feedback">
+      <div class="verdict" id="verdict"></div>
+      <div class="ansline">正解：<b id="correctAns"></b></div>
+      <div class="exp" id="exp"></div>
+      <button class="next" id="nextBtn" onclick="next()">次の問題 →</button>
+    </div>
+  </div>
+
+  <!-- RESULT -->
+  <div class="result" id="result">
+    <div>結果</div>
+    <div class="scorebig"><span></span><span id="rscore">0</span><span> / 14</span></div>
+    <div class="grade" id="grade"></div>
+    <div class="gmsg" id="gmsg"></div>
+    <div class="review" id="review"></div>
+    <div class="actions">
+      <button class="rbtn primary" onclick="restart(false)">🔄 もう一度（全14問）</button>
+      <button class="rbtn ghost" id="wrongOnly" onclick="restart(true)">❌ 間違えた問題だけ復習</button>
+    </div>
+  </div>
+
+  <footer>社労士 労一 育介法（テキスト p.142〜154）／全14問</footer>
+</div>
+
+<script>
+const QUESTIONS = [
+  {cat:"延長育休 p.142", q:"労働者が1歳から1歳6か月に達するまでの子について育児休業をするには、原則として、1歳到達日において本人<b>または配偶者</b>が育児休業をしていることが必要である。", a:true,
+   exp:"〇。1歳到達日に本人<b>または配偶者</b>が育休していることが要件（法5条3項❶）。「本人だけ」ではなく配偶者でもよい点がポイント。"},
+  {cat:"延長育休 p.143", q:"1歳6か月から2歳に達するまでの育児休業は、保育所等に入所を希望し申込みをしているが当面入所できない場合など、雇用継続のために特に必要と認められる場合に取得できる。", a:true,
+   exp:"〇。保育所に入れない・配偶者の死亡等「特に必要と認められる場合」に取得可（法5条4項、則6条の2）。1歳→1歳6か月と同じ構造。"},
+  {cat:"延長育休 p.142", q:"1歳到達日後の育児休業は、一度復職した後であっても、同じ子について再度この延長育休を申し出ることができる。", a:false,
+   exp:"×。「この規定による申出により育児休業をしたことがない場合」に限られる（法5条3項❸）。＝<b>再度の申出はできない</b>（繰り返し延長の防止）。"},
+  {cat:"開始日の指定 p.145", q:"1歳に満たない子に係る育児休業について、開始予定日が「申出日の翌日から起算して1か月を経過する日」より前であるとき、事業主はその経過日までの間で開始予定日を指定できる。", a:true,
+   exp:"〇。育休は「<b>1か月前</b>」までに申出が原則。遅れた場合、事業主は1月等経過日までで開始日を後ろ倒し指定できる（法6条3項）。"},
+  {cat:"日付計算 p.145", q:"申出日が3月1日のとき、「1月等経過日」は3月31日である。", a:false,
+   exp:"×。正しくは<b>4月1日</b>。申出日3/1→翌日3/2起算→1か月の応当日4/2→その前日4/1が1月等経過日。3/31は“その前の日”であって1月等経過日ではない。"},
+  {cat:"開始日の指定 p.145", q:"1歳から1歳6か月までの子に係る育児休業の場合、事業主が開始予定日を指定できる基準は「2週間を経過する日」である。", a:true,
+   exp:"〇。延長育休（1歳〜1歳6か月、1歳6か月〜2歳）は原則の「1か月」ではなく「<b>2週間</b>を経過する日」が基準（法6条3項）。予告期間が短い。"},
+  {cat:"出生時育休 p.148", q:"出生時育児休業は、原則として子の出生の日から起算して8週間を経過する日の翌日までの期間内に、<b>4週間以内</b>の期間を定めて取得する。", a:true,
+   exp:"〇。出生時育休＝出生日から8週間経過日の翌日までの期間内に、<b>4週間以内</b>で取得（法9条の2第1項）。いわゆる“男性版産休”。"},
+  {cat:"出生時育休 p.149", q:"出生時育児休業は、子の出生後8週間以内の期間内であれば、<b>3回</b>に分割して取得することができる。", a:false,
+   exp:"×。分割は「<b>2回</b>」まで（法9条の2第2項❶）。8週間以内に2回取得すると、それ以上は申出できない。"},
+  {cat:"出生時育休 p.149", q:"出生時育児休業の申出があった場合、事業主は原則としてこれを拒むことができない。", a:true,
+   exp:"〇。出生時育休申出は事業主は原則<b>拒めない</b>（法9条の3第1項）。ただし労使協定で雇入れ後1年未満等を除外可。"},
+  {cat:"出生時育休 p.150", q:"出生時育休の開始予定日の指定について、原則は「申出の翌日から2週間を経過する日」までだが、労使協定で雇用環境整備等を定めれば「2週間を超え<b>1か月以内</b>」に延長できる。", a:true,
+   exp:"〇。原則「2週間」、労使協定（雇用環境整備等＋期間設定）があれば「<b>2週間超〜1か月以内</b>」に延長可（法9条の3第3項・4項）。上限は1か月。"},
+  {cat:"出生時育休 p.151", q:"出生時育児休業の期間中は、いかなる場合も就業させることはできない。", a:false,
+   exp:"×。原則は就業不可だが、<b>労使協定があれば</b>休業中に就業可能（労働者の申出・同意が前提、法9条の5）。「いかなる場合も不可」は誤り。"},
+  {cat:"パパママ育休＋ p.154", q:"パパ・ママ育休プラスにより、配偶者が育児休業をしている場合、労働者は1歳<b>2か月</b>に満たない子について育児休業をすることができる。", a:true,
+   exp:"〇。配偶者が1歳到達日以前に育休していれば、労働者は<b>1歳2か月</b>に満たない子について育休可（法9条の6）。"},
+  {cat:"パパママ育休＋ p.154", q:"パパ・ママ育休プラスは、育児休業開始予定日が配偶者がしている育児休業期間の<b>初日前</b>である場合にも適用される。", a:false,
+   exp:"×。開始予定日が「<b>配偶者の育休期間の初日前</b>」の場合は適用<b>しない</b>（適用除外❷）。配偶者が育休に入る前の先取りはできない。"},
+  {cat:"パパママ育休＋ p.154", q:"パパ・ママ育休プラスにより、1人の労働者が取得できる育児休業期間の上限そのものが2か月延長され、最大1年2か月分の休業を取得できる。", a:false,
+   exp:"×。延びるのは取得の“<b>期限</b>”（1歳2か月まで）であって、<b>1人が取れる総量（上限1年）は変わらない</b>。育児休業等可能日数＝出生日〜1歳到達日までの日数（≒1年）。"},
+];
+
+let pool = QUESTIONS.slice();
+let idx = 0, score = 0, wrong = [];
+
+function load(){
+  const item = pool[idx];
+  document.getElementById('tag').textContent = item.cat;
+  document.getElementById('qno').textContent = 'Q' + (idx+1);
+  document.getElementById('qtext').innerHTML = item.q;
+  document.getElementById('cur').textContent = idx+1;
+  document.getElementById('total').textContent = pool.length;
+  document.getElementById('score').textContent = score;
+  document.getElementById('bar').style.width = (idx/pool.length*100) + '%';
+  document.getElementById('btns').style.display = 'flex';
+  document.getElementById('feedback').style.display = 'none';
+}
+
+function answer(choice){
+  const item = pool[idx];
+  const correct = (choice === item.a);
+  if(correct){ score++; } else { wrong.push(item); }
+  document.getElementById('score').textContent = score;
+  document.getElementById('btns').style.display = 'none';
+  const v = document.getElementById('verdict');
+  v.className = 'verdict ' + (correct ? 'ok':'ng');
+  v.innerHTML = correct ? '⭕ 正解！' : '❌ 不正解…';
+  document.getElementById('correctAns').textContent = item.a ? '⚪︎（正しい）' : '✕（誤り）';
+  document.getElementById('exp').innerHTML = item.exp;
+  document.getElementById('feedback').style.display = 'block';
+  document.getElementById('nextBtn').textContent = (idx === pool.length-1) ? '結果を見る →' : '次の問題 →';
+}
+
+function next(){
+  idx++;
+  if(idx >= pool.length){ showResult(); return; }
+  load();
+}
+
+function showResult(){
+  document.getElementById('bar').style.width = '100%';
+  document.getElementById('card').style.display = 'none';
+  const r = document.getElementById('result');
+  r.style.display = 'flex';
+  document.getElementById('rscore').textContent = score;
+  r.querySelector('.scorebig').childNodes[2].textContent = ' / ' + pool.length;
+  const pct = score/pool.length;
+  let grade, msg;
+  if(pct === 1){ grade='🏆 パーフェクト！'; msg='全問正解。本試験レベルに完全対応できています。この調子！'; }
+  else if(pct >= 0.85){ grade='🌸 合格圏！'; msg='よく仕上がっています。間違えた論点だけ詰めれば万全です。'; }
+  else if(pct >= 0.6){ grade='📖 あと一歩'; msg='数字系・適用除外でミスが出やすい時期。下の弱点を重点復習しましょう。'; }
+  else { grade='💪 復習しよう'; msg='テキスト p.142〜154 をもう一度通読してから再挑戦を。伸びしろ大きいです。'; }
+  document.getElementById('grade').textContent = grade;
+  document.getElementById('gmsg').textContent = msg;
+
+  const rv = document.getElementById('review');
+  if(wrong.length === 0){
+    rv.className = 'review allok';
+    rv.innerHTML = '<h3>✅ 間違いゼロ！弱点なし</h3><div class="ritem">完璧です。少し時間を置いてもう一度解くと定着します。</div>';
+    document.getElementById('wrongOnly').style.display = 'none';
+  } else {
+    rv.className = 'review';
+    let html = '<h3>❌ 復習したい論点（'+wrong.length+'問）</h3>';
+    wrong.forEach(w=>{ html += '<div class="ritem"><b>'+w.cat+'</b><br>'+w.exp+'</div>'; });
+    rv.innerHTML = html;
+    document.getElementById('wrongOnly').style.display = 'block';
+  }
+}
+
+function restart(onlyWrong){
+  pool = onlyWrong ? wrong.slice() : QUESTIONS.slice();
+  idx = 0; score = 0; wrong = [];
+  document.getElementById('result').style.display = 'none';
+  document.getElementById('card').style.display = 'flex';
+  load();
+}
+
+load();
+</script>
+</body>
+</html>
