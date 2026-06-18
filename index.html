@@ -244,7 +244,7 @@ function reviveCur(){ const it=session.list[session.idx]; if(it&&it.id){ delete 
 function excludedList(book){ return [].concat(byBook[book]||[], byBookS[book]||[]).filter(q=>isExcluded(q.id)); }
 function save(){ try{localStorage.setItem(HKEY,JSON.stringify(H));}catch(e){} }
 function rec(id,ok){ if(!id)return; const p=H.perQ[id]||{seen:0,correct:0,lastOK:null,streak:0}; p.seen++; if(ok){ p.correct++; p.streak=(p.streak||0)+1; } else { p.streak=0; } p.lastOK=ok; p.ts=Date.now(); if(ok&&p.streak>=3){ H.excluded[id]=1; } H.perQ[id]=p; save(); schedulePush(); }
-function statOf(list){ let seen=0,correct=0,distinct=0; list.forEach(q=>{const p=H.perQ[q.id]; if(p){seen+=p.seen;correct+=p.correct;distinct++;}}); return {seen,correct,distinct,total:list.length,acc:seen?correct/seen:null}; }
+function statOf(list){ let seen=0,correct=0,distinct=0,mastered=0; list.forEach(q=>{const p=H.perQ[q.id]; if(p){seen+=p.seen;correct+=p.correct;distinct++; if(p.lastOK===true)mastered++;}}); return {seen,correct,distinct,mastered,total:list.length,acc:seen?correct/seen:null}; }
 function accColor(a){ if(a===null)return '#475569'; if(a>=0.8)return '#22c55e'; if(a>=0.6)return '#fbbf24'; return '#fb7185'; }
 function shuffle(a){ a=a.slice(); for(let i=a.length-1;i>0;i--){const j=Math.random()*(i+1)|0;[a[i],a[j]]=[a[j],a[i]];} return a; }
 
@@ -817,7 +817,9 @@ function endSession(){
 function renderBookStats(){
   const o=statOf(byBook[curBook]);
   const rows=lawOrder[curBook].map(law=>({law,...statOf(byBookLaw[curBook][law])}));
-  rows.sort((a,b)=>{ if(a.seen===0&&b.seen===0)return 0; if(a.seen===0)return 1; if(b.seen===0)return -1; return a.acc-b.acc; });
+  /* バー＝正解済問題数÷総問題数（直近の正誤で1問1カウント・0〜100%） */
+  const rateOf=r=>r.total?r.mastered/r.total:0;
+  rows.sort((a,b)=>{ if(a.seen===0&&b.seen===0)return 0; if(a.seen===0)return 1; if(b.seen===0)return -1; return rateOf(a)-rateOf(b); });
   let html=`<div class="stats">
     <div class="ov">
       <div class="ovcard"><div class="ovnum">${o.distinct}<span style="font-size:13px;color:#64748b">/${o.total}</span></div><div class="ovlbl">出題済</div></div>
@@ -826,12 +828,13 @@ function renderBookStats(){
     </div>
     <div class="stitle"><span>章別の成績（タップで演習開始）</span><span style="font-weight:600">弱い順</span></div>`;
   rows.forEach(r=>{
-    let badge=r.seen===0?'<span class="badge none">未着手</span>':r.acc>=0.8?'<span class="badge good">得意</span>':(r.seen>=3&&r.acc<0.6)?'<span class="badge weak">苦手</span>':'';
-    const pct=r.acc!==null?Math.round(r.acc*100)+'%':'—';
+    const rate=r.seen===0?null:rateOf(r);
+    let badge=r.seen===0?'<span class="badge none">未着手</span>':rate>=0.8?'<span class="badge good">得意</span>':(r.seen>=3&&rate<0.6)?'<span class="badge weak">苦手</span>':'';
+    const pct=rate!==null?Math.round(rate*100)+'%':'—';
     html+=`<div class="lrow" onclick="selectTab('${r.law.replace(/'/g,"\\'")}')">
-      <div class="lname"><span>${r.law}${qw(curBook,r.law)>=3?' <span class="hot">🔥</span>':''}${badge}</span><span class="pct" style="color:${accColor(r.acc)}">${pct}</span></div>
-      <div class="lbar"><div style="width:${r.acc!==null?r.acc*100:0}%;background:${accColor(r.acc)}"></div></div>
-      <div class="lsub">出題 ${r.distinct}/${r.total} ・ 回答 ${r.seen} ・ 正解 ${r.correct}</div></div>`;
+      <div class="lname"><span>${r.law}${qw(curBook,r.law)>=3?' <span class="hot">🔥</span>':''}${badge}</span><span class="pct" style="color:${accColor(rate)}">${pct}</span></div>
+      <div class="lbar"><div style="width:${rate!==null?rate*100:0}%;background:${accColor(rate)}"></div></div>
+      <div class="lsub">正解済 ${r.mastered}/${r.total} ・ 出題 ${r.distinct}/${r.total} ・ 回答 ${r.seen}（正答率 ${r.acc!==null?Math.round(r.acc*100)+'%':'—'}）</div></div>`;
   });
   html+=`<button class="resetbtn" onclick="resetHist()">🗑 全科目の履歴をリセット</button></div>`;
   main.innerHTML=html;
