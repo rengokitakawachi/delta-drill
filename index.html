@@ -252,7 +252,7 @@ function shuffle(a){ a=a.slice(); for(let i=a.length-1;i>0;i--){const j=Math.ran
 const SKEY='sharoushi_study_v1';
 let S=loadS();
 function loadS(){ try{return JSON.parse(localStorage.getItem(SKEY))||{log:{}};}catch(e){return {log:{}};} }
-if(!S.log)S.log={}; if(!S.daily)S.daily={};
+if(!S.log)S.log={}; if(!S.daily)S.daily={}; if(!S.logTs)S.logTs={};
 const DAILY_GOAL=50; const EXAM=new Date(2026,7,23);
 function daysToExam(){ return Math.max(0,Math.ceil((EXAM-new Date())/86400000)); }
 function todayCount(){ return (S.daily[today()]||0); }
@@ -260,14 +260,15 @@ function bumpDaily(){ const t=today(); S.daily[t]=(S.daily[t]||0)+1; saveS(); }
 function renderTdg(){ const el=document.getElementById('tdg'); if(!el)return; const tc=todayCount(); el.innerHTML='📅 本日 <b style="color:'+(tc>=DAILY_GOAL?'#86efac':'var(--gold)')+'">'+tc+'</b>/'+DAILY_GOAL+'問'+(tc>=DAILY_GOAL?' 🎉':''); }
 function saveS(){ try{localStorage.setItem(SKEY,JSON.stringify(S));}catch(e){} }
 let timer={running:false,startTs:0};
+let lastActive=Date.now(); const IDLE_MS=10*60*1000; /* 10分無操作で自動停止（タイマー放置の暴走防止） */
 function dkey(d){ return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); }
 function today(){ return dkey(new Date()); }
 function todaySecs(){ return (S.log[today()]||0) + (timer.running?Math.floor((Date.now()-timer.startTs)/1000):0); }
 function totalSecs(){ let t=0; for(const k in S.log)t+=S.log[k]; if(timer.running)t+=Math.floor((Date.now()-timer.startTs)/1000); return t; }
 function mondayOf(d){ const x=new Date(d); const g=x.getDay(); x.setDate(x.getDate()+(g===0?-6:1-g)); x.setHours(0,0,0,0); return x; } /* 週は月曜始まり */
 function weekSecs(){ let t=0; const tk=today(); for(let d=mondayOf(new Date());;d.setDate(d.getDate()+1)){ const k=dkey(d); t+=(k===tk?todaySecs():(S.log[k]||0)); if(k===tk)break; } return t; }
-function flush(){ if(timer.running){ const t=today(),add=Math.floor((Date.now()-timer.startTs)/1000); if(add>0){S.log[t]=(S.log[t]||0)+add;} timer.startTs=Date.now(); saveS(); } }
-function startStudy(){ timer.running=true; timer.startTs=Date.now(); renderTimerChip(); if(view==='home')renderHome(); }
+function flush(){ if(timer.running){ const t=today(),add=Math.floor((Date.now()-timer.startTs)/1000); if(add>0){S.log[t]=(S.log[t]||0)+add; S.logTs[t]=Date.now();} timer.startTs=Date.now(); saveS(); } }
+function startStudy(){ timer.running=true; timer.startTs=Date.now(); lastActive=Date.now(); renderTimerChip(); if(view==='home')renderHome(); }
 function stopStudy(){ flush(); timer.running=false; saveS(); pushNow(); renderTimerChip(); if(view==='home')renderHome(); }
 function toggleStudy(){ timer.running?stopStudy():startStudy(); }
 function fmtClock(s){ const h=Math.floor(s/3600),m=Math.floor(s%3600/60),x=s%60; return h+':'+String(m).padStart(2,'0')+':'+String(x).padStart(2,'0'); }
@@ -315,11 +316,23 @@ function studyLogHTML(){
   const wd=['日','月','火','水','木','金','土'];
   const mon={}; keys.forEach(k=>{ const m=k.slice(0,7); mon[m]=(mon[m]||0)+map[k]; });
   const monHtml=Object.keys(mon).sort().reverse().map(m=>{ const[y,mo]=m.split('-'); return `<div class="slmon"><span>${y}年${+mo}月 合計</span><span>${fmtHM(mon[m])}</span></div>`; }).join('');
-  const rows=keys.map(k=>{ const d=new Date(k+'T00:00:00'); const md=(+k.slice(5,7))+'/'+(+k.slice(8,10)); return `<div class="slrow"><span class="sld">${md}（${wd[d.getDay()]}）${k===tk?' ·本日':''}</span><span class="slm">${fmtHM(map[k])}</span></div>`; }).join('');
-  return `<div class="sllist">${monHtml}<div class="slhead">日別</div>${rows}</div>`;
+  const rows=keys.map(k=>{ const d=new Date(k+'T00:00:00'); const md=(+k.slice(5,7))+'/'+(+k.slice(8,10)); return `<div class="slrow"><span class="sld">${md}（${wd[d.getDay()]}）${k===tk?' ·本日':''}</span><span class="slm">${fmtHM(map[k])} <button onclick="editDay('${k}')" title="この日の学習時間を修正" style="background:none;border:none;color:#7dd3fc;font-size:13px;cursor:pointer;padding:2px 4px;margin-left:2px">✏️</button></span></div>`; }).join('');
+  return `<div class="sllist">${monHtml}<div class="slhead">日別 <span style="font-weight:600;color:#64748b">✏️で修正</span></div>${rows}</div>`;
 }
-setInterval(()=>{ if(timer.running){ renderTimerChip(); const tb=document.getElementById('todaybig'); if(tb)tb.textContent=fmtClock(todaySecs()); if(Date.now()%10000<1000){ flush(); schedulePush(); } } },1000);
-document.addEventListener('visibilitychange',()=>{ if(document.hidden){ flush(); } else if(timer.running){ timer.startTs=Date.now(); } });
+function editDay(k){
+  if(timer.running)stopStudy(); /* 計測中は止めてから修正（再加算を防ぐ） */
+  const curSec=(k===today())?todaySecs():(S.log[k]||0);
+  const v=prompt('「'+k+'」の学習時間を「分」で入力してください。\n（タイマーの誤記録はここで上書き修正できます）', String(Math.round(curSec/60)));
+  if(v===null)return;
+  const m=Math.floor(Number(v));
+  if(!isFinite(m)||m<0){ alert('0以上の数値（分）を入力してください。'); return; }
+  S.log[k]=m*60; if(!S.logTs)S.logTs={}; S.logTs[k]=Date.now();
+  saveS(); pushNow();
+  if(view==='home'){ renderHome(); } renderTimerChip();
+}
+setInterval(()=>{ if(timer.running){ if(Date.now()-lastActive>IDLE_MS){ stopStudy(); return; } renderTimerChip(); const tb=document.getElementById('todaybig'); if(tb)tb.textContent=fmtClock(todaySecs()); if(Date.now()%10000<1000){ flush(); schedulePush(); } } },1000);
+document.addEventListener('visibilitychange',()=>{ if(document.hidden){ flush(); } else if(timer.running){ timer.startTs=Date.now(); lastActive=Date.now(); } });
+document.addEventListener('pointerdown',()=>{ lastActive=Date.now(); },{passive:true}); /* 操作があれば計測継続（無操作のみ自動停止） */
 window.addEventListener('beforeunload',flush);
 
 /* ===== data export / import (iCloud Drive friendly) ===== */
@@ -450,12 +463,18 @@ function mergeRemote(d){
     if(!cur){ H.perQ[id]={seen:inc.seen||0,correct:inc.correct||0,lastOK:(inc.lastOK==null?null:inc.lastOK),streak:inc.streak||0,ts:inc.ts||0}; ch=true; }
     else { const ns=Math.max(cur.seen||0,inc.seen||0), nc=Math.max(cur.correct||0,inc.correct||0); if(ns!==(cur.seen||0)||nc!==(cur.correct||0)){ cur.seen=ns; cur.correct=nc; ch=true; }
       if((inc.ts||0)>(cur.ts||0)){ cur.ts=inc.ts; if(inc.lastOK!=null)cur.lastOK=inc.lastOK; ch=true; } } } }
-  if(d.log){ for(const k in d.log){ const v=Math.max(S.log[k]||0, d.log[k]||0); if(v!==(S.log[k]||0)){ S.log[k]=v; ch=true; } } }
+  if(d.log){ if(!S.logTs)S.logTs={}; for(const k in d.log){
+    const rv=d.log[k]||0, lv=S.log[k]||0, rts=(d.logTs&&d.logTs[k])||0, lts=S.logTs[k]||0;
+    /* 片方にでもタイムスタンプがあれば最終更新優先(LWW・修正が定着)。無ければ旧来のmax(後方互換) */
+    const nv=(rts||lts)?(rts>lts?rv:lv):Math.max(lv,rv);
+    if(nv!==lv){ S.log[k]=nv; ch=true; }
+    if(rts>lts){ S.logTs[k]=rts; ch=true; }
+  } }
   if(d.excluded){ for(const id in d.excluded){ if(d.excluded[id]&&!H.excluded[id]){ H.excluded[id]=1; ch=true; } } }
   if(d.daily){ for(const k in d.daily){ const v=Math.max(S.daily[k]||0,d.daily[k]||0); if(v!==(S.daily[k]||0)){ S.daily[k]=v; ch=true; } } }
   return ch;
 }
-function pushNow(){ if(!syncDoc) return; try{ flush(); syncDoc.set({perQ:H.perQ, log:S.log, excluded:H.excluded, daily:S.daily, ts:Date.now()},{merge:true}); }catch(e){} }
+function pushNow(){ if(!syncDoc) return; try{ flush(); syncDoc.set({perQ:H.perQ, log:S.log, logTs:S.logTs, excluded:H.excluded, daily:S.daily, ts:Date.now()},{merge:true}); }catch(e){} }
 function schedulePush(){ if(!syncDoc) return; clearTimeout(pushTimer); pushTimer=setTimeout(pushNow,1500); }
 
 /* ===== state ===== */
@@ -648,7 +667,7 @@ function renderEmptyExcluded(){
 
 /* ===== session ===== */
 function startSession(list,title,scope,excludeMode){ if(!list||!list.length){ alert('対象の問題がありません。'); return; }
-  if(!timer.running){ timer.running=true; timer.startTs=Date.now(); renderTimerChip(); } /* 演習開始で自動計測 */
+  if(!timer.running){ timer.running=true; timer.startTs=Date.now(); lastActive=Date.now(); renderTimerChip(); } /* 演習開始で自動計測 */
   session={list,title,idx:0,score:0,wrong:[],scope,excludeMode:!!excludeMode}; renderCard(); }
 function renderCard(){
   const s=session,item=s.list[s.idx];
@@ -769,6 +788,7 @@ function gradeS(ok){ const s=session,item=s.list[s.idx]; rec(item.id,ok); bumpDa
 function stopSession(){ const s=session; if(s&&s.idx>0&&s.idx<s.list.length){ if(!confirm(`ここまで ${s.idx}問 回答しました（履歴は保存済み）。中断しますか？`))return; } if(timer.running)stopStudy(); backFromSession(); }
 function backFromSession(){ session=null; if(view==='home'){ goHome(); } else { selectTab('stats'); } }
 function endSession(){
+  if(timer.running)stopStudy(); /* 解き切ったら計測終了（タイマー停止漏れの暴走を防ぐ） */
   const s=session,pct=s.score/s.list.length;
   let grade,msg;
   if(pct===1){grade='🏆 パーフェクト！';msg='全問正解。完璧です！';}
