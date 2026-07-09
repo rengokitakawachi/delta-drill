@@ -1,0 +1,11 @@
+{
+  "name": "delta-drill",
+  "private": true,
+  "description": "社労士学習クイズ DELTA Drill（GitHub Pages配信・依存ゼロ）",
+  "scripts": {
+    "build": "node build/build.cjs",
+    "map": "node scripts/repo-map.mjs",
+    "check": "node scripts/build-check.mjs",
+    "test": "node scripts/build-check.mjs"
+  }
+}
