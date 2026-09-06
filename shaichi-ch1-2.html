@@ -76,7 +76,20 @@ border-radius:9px;padding:9px 10px;font-size:13px}
 .obs .mini{border:1px solid var(--line);background:var(--card2);color:var(--txt);border-radius:9px;
 padding:9px 10px;font-size:12px;cursor:pointer}
 .obs .on{background:rgba(56,189,248,.2);border-color:var(--acc);color:#bae6fd}
+.warn{background:#3a1717;border:1px solid var(--ng);border-radius:10px;padding:11px;
+font-size:12px;line-height:1.7;margin-bottom:12px;display:none}
+.bk textarea{width:100%;height:70px;background:#0f172a;border:1px solid var(--line);color:var(--txt);
+border-radius:9px;padding:9px;font-size:11px;font-family:ui-monospace,monospace;resize:vertical}
+.bk .btns2{display:flex;gap:7px;margin-top:7px}
+.bk .btns2 button{flex:1;border:1px solid var(--line);background:var(--card2);color:var(--txt);
+border-radius:9px;padding:10px;font-size:12px;font-weight:700;cursor:pointer}
+.bk .msg{font-size:11.5px;color:var(--acc);margin-top:7px;min-height:15px}
+.sync .st{font-size:11.5px;margin-top:7px;min-height:15px;color:var(--sub)}
+.sync .st.ok{color:var(--ok)}.sync .st.err{color:var(--ng)}
 </style>
+<script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore-compat.js"></script>
 </head>
 <body>
 <div class="wrap">
@@ -86,6 +99,7 @@ padding:9px 10px;font-size:12px;cursor:pointer}
 </header>
 
 <div id="home">
+  <div class="warn" id="warn"></div>
   <div class="panel">
     <h2>今日の目標</h2>
     <div class="goal"><span id="todayN">0</span><small> / <span id="goalN">20</span>問</small>
@@ -127,6 +141,35 @@ padding:9px 10px;font-size:12px;cursor:pointer}
       <button class="mini" id="obAdv" style="flex:1" onclick="setObsMode('adv')">⚡ 一発ジャンプ</button>
       <button class="mini" id="obSea" style="flex:1" onclick="setObsMode('search')">🔍 検索で開く</button>
     </div>
+  </div>
+  <div class="panel bk sync">
+    <h2>☁️ 端末間同期（Firebase）</h2>
+    <div style="font-size:11.5px;color:var(--sub);line-height:1.65;margin-bottom:9px">
+      <b style="color:#bae6fd">総合版と同じ同期コード</b>を使います。同じコードを入れた端末どうしで
+      学習記録が自動で同期されます（アプリ内ブラウザ↔Safari も繋がります）。
+      総合版で設定済みなら自動で入ります。
+    </div>
+    <div style="display:flex;gap:7px">
+      <input id="sc" placeholder="同期コード（任意の文字列）" autocapitalize="off" autocorrect="off" spellcheck="false">
+      <button class="mini" style="background:var(--maru);color:#fff;border:none" onclick="saveSync()">接続</button>
+    </div>
+    <div class="st" id="syncst">オフ</div>
+  </div>
+
+  <div class="panel bk">
+    <h2>💾 バックアップ（手動・同期を使わない場合）</h2>
+    <div style="font-size:11.5px;color:var(--sub);line-height:1.65;margin-bottom:9px">
+      学習記録は<b style="color:#bae6fd">この端末のこのブラウザだけ</b>に保存されます。
+      アプリ内ブラウザと Safari も別枠です。
+      端末やブラウザを移るときは「書き出し」→ 移動先で「読み込み」してください。
+    </div>
+    <textarea id="bk" placeholder="ここにバックアップ文字列が出ます／貼り付けて読み込みます"></textarea>
+    <div class="btns2">
+      <button onclick="bkExport()">⬆ 書き出し</button>
+      <button onclick="bkImport(true)">⬇ 読み込み（統合）</button>
+      <button onclick="bkImport(false)">⬇ 置き換え</button>
+    </div>
+    <div class="msg" id="bkmsg"></div>
   </div>
   <footer>
     ○× 42問／選択式 17問・計59問<br>
@@ -175,7 +218,7 @@ const GOAL=20;
 
 function today(){const d=new Date();return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');}
 function loadS(){try{return JSON.parse(localStorage.getItem(KEY))||{p:{},day:'',n:0};}catch(e){return {p:{},day:'',n:0};}}
-function saveS(){try{localStorage.setItem(KEY,JSON.stringify(S));}catch(e){}}
+function saveS(){try{localStorage.setItem(KEY,JSON.stringify(S));}catch(e){} if(typeof schedulePush==='function') schedulePush();}
 let S=loadS();
 if(S.day!==today()){S.day=today();S.n=0;S.t=0;saveS();}
 if(typeof S.t!=='number') S.t=0;
@@ -259,9 +302,96 @@ function renderHome(){
   const ov=document.getElementById('ov'), of=document.getElementById('of');
   if(ov&&document.activeElement!==ov) ov.value=obsVault();
   if(of&&document.activeElement!==of) of.value=obsFolder();
+  const sc=document.getElementById('sc');
+  if(sc&&document.activeElement!==sc) sc.value=syncCode();
   const adv=obsMode()==='adv';
   document.getElementById('obAdv').className='mini'+(adv?' on':'');
   document.getElementById('obSea').className='mini'+(adv?'':' on');
+}
+
+/* ===== Firebase 同期（総合版と同じ sync_code・同じ doc の別フィールドを使う） =====
+   総合版は sync/{code} の perQ / log / excluded / daily を使う。
+   本ドリルは同じ doc の shaichi_ch12 フィールドだけを {merge:true} で読み書きするため、
+   総合版のデータには一切触れない。 */
+const FBCFG={apiKey:"AIzaSyAdU1F-JtSC4j-wvqbaUJGTIosW6mOkEck",authDomain:"sharoushi-quiz-73790.firebaseapp.com",projectId:"sharoushi-quiz-73790",storageBucket:"sharoushi-quiz-73790.firebasestorage.app",messagingSenderId:"859893882829",appId:"1:859893882829:web:b2d05225c3c7acf6612e84"};
+const FIELD='shaichi_ch12';
+let fbReady=false, syncDoc=null, unsub=null, pushTimer=null, applyingRemote=false;
+function syncCode(){try{return localStorage.getItem('sync_code')||'';}catch(e){return '';}}
+function setSt(t,c){const el=document.getElementById('syncst'); if(el){el.textContent=t; el.className='st '+(c||'');}}
+function saveSync(){
+  const c=document.getElementById('sc').value.trim();
+  try{localStorage.setItem('sync_code',c);}catch(e){}
+  connectSync(); renderHome();
+}
+function initFB(){
+  if(typeof firebase==='undefined'){ setSt('SDK未読込（オフラインで動作します）','err'); return; }
+  try{
+    firebase.initializeApp(FBCFG);
+    firebase.auth().onAuthStateChanged(u=>{ if(u){ fbReady=true; connectSync(); } });
+    firebase.auth().signInAnonymously().catch(()=>setSt('認証エラー','err'));
+  }catch(e){ setSt('初期化エラー','err'); }
+}
+function connectSync(){
+  if(unsub){ unsub(); unsub=null; }
+  if(!fbReady) return;
+  const code=syncCode();
+  if(!code){ syncDoc=null; setSt('オフ（同期コード未設定）',''); return; }
+  setSt('接続中…','');
+  try{
+    syncDoc=firebase.firestore().collection('sync').doc(code);
+    unsub=syncDoc.onSnapshot(snap=>{
+      setSt('● 同期中','ok');
+      const d=(snap.exists && snap.data() && snap.data()[FIELD]) || null;
+      if(!d){ pushNow(); return; }
+      if(mergeRemote(d)){ saveS(); renderHome(); }
+      pushNow();
+    }, ()=>setSt('接続エラー','err'));
+    pushNow();
+  }catch(e){ setSt('接続エラー','err'); }
+}
+/* 問題ごとに at（最終更新時刻）が新しい方を採る。
+   間違えて要復習へ落ちた記録も正しく伝播する（段階の大小では判定しない） */
+function mergeRemote(d){
+  let ch=false;
+  if(d.p) for(const id in d.p){
+    const r=d.p[id]||{}, l=S.p[id];
+    if(!l || (r.at||'')>(l.at||'')){ S.p[id]={b:r.b||0, at:r.at||''}; ch=true; }
+  }
+  if(d.day===today()){
+    if((d.n||0)>S.n){ S.n=d.n; ch=true; }
+    if((d.t||0)>S.t){ S.t=d.t; ch=true; }
+  }
+  return ch;
+}
+function pushNow(){
+  if(!syncDoc) return;
+  try{ syncDoc.set({[FIELD]:{p:S.p, day:S.day, n:S.n, t:S.t, ts:Date.now()}},{merge:true}); }catch(e){}
+}
+function schedulePush(){ if(!syncDoc) return; clearTimeout(pushTimer); pushTimer=setTimeout(pushNow,1500); }
+
+/* ===== バックアップ ===== */
+function bkExport(){
+  document.getElementById('bk').value=JSON.stringify(S);
+  document.getElementById('bkmsg').textContent='書き出しました。全文をコピーして保管してください。';
+}
+function bkImport(merge){
+  const el=document.getElementById('bk'), msg=document.getElementById('bkmsg');
+  let d; try{ d=JSON.parse(el.value); }catch(e){ msg.textContent='読み込めません（形式が不正です）'; return; }
+  if(!d||typeof d!=='object'||typeof d.p!=='object'){ msg.textContent='読み込めません（学習記録が入っていません）'; return; }
+  if(merge){
+    let add=0, upd=0;
+    for(const k in d.p){
+      const a=S.p[k], b=d.p[k];
+      if(!a){ S.p[k]=b; add++; }
+      else if((b.b||0)>(a.b||0)){ S.p[k]=b; upd++; }   // 進んでいる方を採る
+    }
+    msg.textContent=`統合しました（新規${add}件・更新${upd}件）`;
+  }else{
+    if(!confirm('この端末の記録を、貼り付けた内容で置き換えます。よろしいですか？')) return;
+    S={p:d.p, day:today(), n:d.day===today()?(d.n||0):0, t:d.day===today()?(d.t||0):0};
+    msg.textContent='置き換えました。';
+  }
+  saveS(); renderHome();
 }
 
 function quit(){
@@ -367,7 +497,18 @@ function resetAll(){
   if(!confirm('この端末の学習記録をすべて消します。よろしいですか？'))return;
   S={p:{},day:today(),n:0,t:0};saveS();renderHome();
 }
+(function(){
+  let ok=true;
+  try{ localStorage.setItem('__t','1'); localStorage.removeItem('__t'); }catch(e){ ok=false; }
+  if(!ok){
+    const w=document.getElementById('warn');
+    w.style.display='block';
+    w.innerHTML='⚠️ <b>このブラウザでは学習記録を保存できません</b>（プライベートブラウズ等）。'
+      +'解いた内容は残りません。通常のブラウザで開き直してください。';
+  }
+})();
 renderHome();
+initFB();
 </script>
 </body>
 </html>
