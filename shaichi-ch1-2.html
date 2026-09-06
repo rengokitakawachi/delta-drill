@@ -54,7 +54,12 @@ padding:12px;font-size:14px;text-align:left;cursor:pointer}
 .selfrate .lb{font-size:11px;color:var(--sub);margin-bottom:6px}
 .selfrate .opts{display:flex;gap:6px}
 .selfrate button{flex:1;border:1px solid var(--line);background:var(--card2);color:var(--txt);
-border-radius:9px;padding:10px 2px;font-size:11px;font-weight:700;cursor:pointer}
+border-radius:9px;padding:8px 2px;font-size:11px;font-weight:700;cursor:pointer;line-height:1.35}
+.selfrate button small{display:block;font-weight:400;font-size:9.5px;color:var(--sub);margin-top:2px}
+.selfrate button.on{background:rgba(56,189,248,.22);border-color:var(--acc);color:#bae6fd}
+.rec{background:#0b1220;border:1px solid var(--line);border-radius:9px;padding:8px 10px;
+font-size:12px;margin-top:11px;text-align:center}
+.rec b{color:var(--acc)}
 .next{margin-top:12px;width:100%;background:linear-gradient(135deg,#0ea5e9,#2563eb);border:none;color:#fff;
 border-radius:12px;padding:14px;font-size:15px;font-weight:800;cursor:pointer}
 footer{text-align:center;font-size:10px;color:#64748b;padding:14px 0 4px;line-height:1.6}
@@ -140,13 +145,14 @@ padding:9px 10px;font-size:12px;cursor:pointer}
     <div class="verdict" id="verdict"></div>
     <div class="ansline">正解：<b id="ca"></b></div>
     <div class="exp" id="exp"></div>
+    <div class="rec" id="rec"></div>
     <div class="selfrate" id="selfrate">
-      <div class="lb">この問題の手応えは？（次に出る間隔が変わります）</div>
+      <div class="lb">自動で記録済み。変えたいときだけタップ</div>
       <div class="opts">
-        <button onclick="rate(1)">要復習</button>
-        <button onclick="rate(2)">不安あり</button>
-        <button onclick="rate(3)">覚えた</button>
-        <button onclick="rate(4)">完璧</button>
+        <button id="rb1" onclick="rate(1)">要復習<small>あと3回</small></button>
+        <button id="rb2" onclick="rate(2)">不安あり<small>あと2回</small></button>
+        <button id="rb3" onclick="rate(3)">覚えた<small>あと1回</small></button>
+        <button id="rb4" onclick="rate(4)">完璧<small>復習不要</small></button>
       </div>
     </div>
     <button class="next" id="nextBtn" onclick="next()">次の問題 →</button>
@@ -284,19 +290,30 @@ function feedback(ok,correctLabel){
     +(cur.detail?`<div class="detail">${cur.detail}</div>`:'')
     +refLine(cur.page);
   document.getElementById('fb').style.display='block';
-  // 不正解なら自己申告を待たず要復習へ落とす
-  if(!ok) apply(1); 
-  document.getElementById('selfrate').style.display = ok?'block':'none';
+  // 秒トレと同じく自動記録する。正解=1段階上げる／不正解=要復習へ落とす
+  apply(ok ? Math.min(box(cur.id)+1,4) : 1, false);
+  showRec();
+  document.getElementById('selfrate').style.display='block';
   document.getElementById('nextBtn').textContent=(idx===pool.length-1)?'ホームへ →':'次の問題 →';
 }
 function ans(v){ if(answered)return; feedback(v===cur.a, cur.a?'⚪︎（正しい）':'✕（誤り）'); }
 function ansSel(v){ if(answered)return; feedback(v===cur._ans, cur._ans); }
 
-function apply(b){
+function apply(b,recount){
   S.p[cur.id]={b:b,at:new Date().toISOString()};
-  S.n++; saveS();
+  if(!recount) S.n++;
+  saveS();
 }
-function rate(b){ if(!answered)return; apply(b); next(); }
+function showRec(){
+  const b=box(cur.id);
+  const left=4-b;
+  document.getElementById('rec').innerHTML =
+    `記録: <b>${LV[b]}</b>` + (b>=4?'（復習不要）':`（完璧まであと${left}回）`);
+  for(let i=1;i<=4;i++){
+    document.getElementById('rb'+i).className = (i===b?'on':'');
+  }
+}
+function rate(b){ if(!answered)return; apply(b,true); showRec(); }
 
 function next(){
   idx++;
