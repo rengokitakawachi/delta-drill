@@ -57,6 +57,15 @@ border-radius:9px;padding:10px 2px;font-size:11px;font-weight:700;cursor:pointer
 border-radius:12px;padding:14px;font-size:15px;font-weight:800;cursor:pointer}
 footer{text-align:center;font-size:10px;color:#64748b;padding:14px 0 4px;line-height:1.6}
 .link{color:var(--acc);cursor:pointer;text-decoration:underline}
+.quit{background:none;border:1px solid var(--line);color:var(--sub);border-radius:8px;
+padding:4px 10px;font-size:11px;cursor:pointer}
+.reflink{display:inline-block;margin-top:9px;color:var(--acc);text-decoration:none;font-size:12px;
+background:#0b1220;border:1px solid var(--line);border-radius:8px;padding:7px 10px}
+.obs input{flex:1;min-width:0;background:#0f172a;border:1px solid var(--line);color:var(--txt);
+border-radius:9px;padding:9px 10px;font-size:13px}
+.obs .mini{border:1px solid var(--line);background:var(--card2);color:var(--txt);border-radius:9px;
+padding:9px 10px;font-size:12px;cursor:pointer}
+.obs .on{background:rgba(56,189,248,.2);border-color:var(--acc);color:#bae6fd}
 </style>
 </head>
 <body>
@@ -91,6 +100,23 @@ footer{text-align:center;font-size:10px;color:#64748b;padding:14px 0 4px;line-he
         <small>定着度に関係なく全59問</small></button>
     </div>
   </div>
+  <div class="panel obs">
+    <h2>📕 Obsidian 連携</h2>
+    <div style="font-size:11.5px;color:var(--sub);line-height:1.65;margin-bottom:9px">
+      解説の「📖 参照ページ ↗」をタップすると Obsidian がテキストの該当ページを開きます。
+      一発ジャンプには <b style="color:#bae6fd">Advanced URI</b> プラグインが必要です（未導入なら「検索」を選択）。
+      <b style="color:#bae6fd">総合版と同じ設定を共有</b>します。
+    </div>
+    <div style="display:flex;gap:7px;margin-bottom:8px">
+      <input id="ov" placeholder="vault名" autocapitalize="off" autocorrect="off" spellcheck="false">
+      <input id="of" placeholder="フォルダ名（任意）" autocapitalize="off" autocorrect="off" spellcheck="false">
+      <button class="mini" style="background:var(--maru);color:#fff;border:none" onclick="saveObs()">保存</button>
+    </div>
+    <div style="display:flex;gap:7px">
+      <button class="mini" id="obAdv" style="flex:1" onclick="setObsMode('adv')">⚡ 一発ジャンプ</button>
+      <button class="mini" id="obSea" style="flex:1" onclick="setObsMode('search')">🔍 検索で開く</button>
+    </div>
+  </div>
   <footer>
     ○× 42問／選択式 17問・計59問<br>
     進捗率は 完璧1.0／覚えた0.75／不安あり0.5／要復習0.25／未学習0 の加重平均<br>
@@ -99,7 +125,8 @@ footer{text-align:center;font-size:10px;color:#64748b;padding:14px 0 4px;line-he
 </div>
 
 <div class="card" id="card">
-  <div class="meta"><span class="tag" id="tag"></span><span id="cnt"></span></div>
+  <div class="meta"><span class="tag" id="tag"></span>
+    <span><span id="cnt"></span>　<button class="quit" onclick="quit()">✕ 中断</button></span></div>
   <div class="qtext" id="qtext"></div>
   <div class="btns" id="oxbtns">
     <button class="bmaru" onclick="ans(true)">⚪︎</button>
@@ -139,6 +166,30 @@ function saveS(){try{localStorage.setItem(KEY,JSON.stringify(S));}catch(e){}}
 let S=loadS();
 if(S.day!==today()){S.day=today();S.n=0;saveS();}
 
+/* ===== Obsidian 連携（総合版と同じ localStorage キーを共有） ===== */
+const OBS_LABEL='⑩基礎講座_社会保険に関する一般常識';
+function obsVault(){try{return localStorage.getItem('obsidian_vault')||'';}catch(e){return '';}}
+function obsFolder(){try{return localStorage.getItem('obsidian_folder')||'';}catch(e){return '';}}
+function obsMode(){try{return localStorage.getItem('obsidian_mode')||'adv';}catch(e){return 'adv';}}
+function saveObs(){
+  try{localStorage.setItem('obsidian_vault',document.getElementById('ov').value.trim());
+      localStorage.setItem('obsidian_folder',document.getElementById('of').value.trim().replace(/^\/+|\/+$/g,''));}catch(e){}
+  renderHome();
+}
+function setObsMode(m){try{localStorage.setItem('obsidian_mode',m);}catch(e){} renderHome();}
+function obsHref(page){
+  const v=obsVault(), vp=v?('vault='+encodeURIComponent(v)+'&'):'';
+  if(obsMode()==='adv'){
+    const f=obsFolder(), fp=(f?f+'/':'')+OBS_LABEL;
+    return 'obsidian://advanced-uri?'+vp+'filepath='+encodeURIComponent(fp)
+      +'&heading='+encodeURIComponent('【'+OBS_LABEL+' p.'+page+'】');
+  }
+  return 'obsidian://search?'+vp+'query='+encodeURIComponent('"'+OBS_LABEL+' p.'+page+'"');
+}
+function refLine(page){
+  return '<a class="reflink" href="'+obsHref(page)+'">📖 '+OBS_LABEL+' P.'+page+' ↗</a>';
+}
+
 function box(id){return (S.p[id]&&S.p[id].b)||0;}
 function due(id){
   const r=S.p[id]; if(!r) return true;            // 未学習は常に対象
@@ -165,6 +216,18 @@ function renderHome(){
   document.getElementById('btnRev').disabled = dn===0;
   document.getElementById('c1n').textContent=`${Q.filter(q=>q.ch===1).length}問`;
   document.getElementById('c2n').textContent=`${Q.filter(q=>q.ch===2).length}問`;
+  const ov=document.getElementById('ov'), of=document.getElementById('of');
+  if(ov&&document.activeElement!==ov) ov.value=obsVault();
+  if(of&&document.activeElement!==of) of.value=obsFolder();
+  const adv=obsMode()==='adv';
+  document.getElementById('obAdv').className='mini'+(adv?' on':'');
+  document.getElementById('obSea').className='mini'+(adv?'':' on');
+}
+
+function quit(){
+  document.getElementById('card').style.display='none';
+  document.getElementById('home').style.display='block';
+  renderHome();
 }
 
 let pool=[],idx=0,cur=null,answered=false;
@@ -213,7 +276,9 @@ function feedback(ok,correctLabel){
   v.className='verdict '+(ok?'ok':'ng');
   v.innerHTML=ok?'⭕ 正解':'❌ 不正解';
   document.getElementById('ca').textContent=correctLabel;
-  document.getElementById('exp').innerHTML=cur.exp+(cur.detail?`<div class="detail">${cur.detail}</div>`:'');
+  document.getElementById('exp').innerHTML=cur.exp
+    +(cur.detail?`<div class="detail">${cur.detail}</div>`:'')
+    +refLine(cur.page);
   document.getElementById('fb').style.display='block';
   // 不正解なら自己申告を待たず要復習へ落とす
   if(!ok) apply(1); 
