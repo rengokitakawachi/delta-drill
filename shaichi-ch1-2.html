@@ -60,6 +60,9 @@ border-radius:9px;padding:8px 2px;font-size:11px;font-weight:700;cursor:pointer;
 .rec{background:#0b1220;border:1px solid var(--line);border-radius:9px;padding:8px 10px;
 font-size:12px;margin-top:11px;text-align:center}
 .rec b{color:var(--acc)}
+.qtime{float:right;font-variant-numeric:tabular-nums}
+.tstat{font-size:12px;color:var(--sub);margin-top:6px}
+.tstat b{color:var(--acc);font-weight:700}
 .next{margin-top:12px;width:100%;background:linear-gradient(135deg,#0ea5e9,#2563eb);border:none;color:#fff;
 border-radius:12px;padding:14px;font-size:15px;font-weight:800;cursor:pointer}
 footer{text-align:center;font-size:10px;color:#64748b;padding:14px 0 4px;line-height:1.6}
@@ -87,6 +90,7 @@ padding:9px 10px;font-size:12px;cursor:pointer}
     <h2>今日の目標</h2>
     <div class="goal"><span id="todayN">0</span><small> / <span id="goalN">20</span>問</small>
       <span class="pct" id="todayMsg"></span></div>
+    <div class="tstat" id="tstat"></div>
   </div>
   <div class="panel">
     <h2>学習状況 <span class="pct" id="progPct">0%</span></h2>
@@ -133,7 +137,7 @@ padding:9px 10px;font-size:12px;cursor:pointer}
 
 <div class="card" id="card">
   <div class="meta"><span class="tag" id="tag"></span>
-    <span><span id="cnt"></span>　<button class="quit" onclick="quit()">✕ 中断</button></span></div>
+    <span><span id="cnt"></span>　<span class="qtime" id="qtime">0秒</span>　<button class="quit" onclick="quit()">✕ 中断</button></span></div>
   <div class="lawbar" id="lawbar"></div>
   <div class="qtext" id="qtext"></div>
   <div class="btns" id="oxbtns">
@@ -173,7 +177,31 @@ function today(){const d=new Date();return d.getFullYear()+'-'+String(d.getMonth
 function loadS(){try{return JSON.parse(localStorage.getItem(KEY))||{p:{},day:'',n:0};}catch(e){return {p:{},day:'',n:0};}}
 function saveS(){try{localStorage.setItem(KEY,JSON.stringify(S));}catch(e){}}
 let S=loadS();
-if(S.day!==today()){S.day=today();S.n=0;saveS();}
+if(S.day!==today()){S.day=today();S.n=0;S.t=0;saveS();}
+if(typeof S.t!=='number') S.t=0;
+
+/* ===== 時間計測 ===== */
+const MAX_Q_SEC=300;                 // 放置対策。1問あたりの上限
+let qStart=0, qTicker=null;
+function fmt(sec){
+  sec=Math.round(sec);
+  const m=Math.floor(sec/60), r=sec%60;
+  return m? `${m}分${r}秒` : `${r}秒`;
+}
+function startTimer(){
+  qStart=Date.now();
+  document.getElementById('qtime').textContent='0秒';
+  clearInterval(qTicker);
+  qTicker=setInterval(()=>{
+    document.getElementById('qtime').textContent=fmt((Date.now()-qStart)/1000);
+  },1000);
+}
+function stopTimer(){
+  clearInterval(qTicker); qTicker=null;
+  const sec=Math.min((Date.now()-qStart)/1000, MAX_Q_SEC);
+  document.getElementById('qtime').textContent=fmt(sec);
+  return sec;
+}
 
 /* ===== Obsidian 連携（総合版と同じ localStorage キーを共有） ===== */
 const OBS_LABEL='⑩基礎講座_社会保険に関する一般常識';
@@ -220,6 +248,9 @@ function renderHome(){
   document.getElementById('todayN').textContent=S.n;
   document.getElementById('goalN').textContent=GOAL;
   document.getElementById('todayMsg').textContent = S.n>=GOAL?'目標達成！':`あと${GOAL-S.n}問`;
+  document.getElementById('tstat').innerHTML = S.n
+    ? `学習時間 <b>${fmt(S.t)}</b>　1問あたり <b>${fmt(S.t/S.n)}</b>`
+    : '学習時間 <b>0秒</b>';
   const dn=dueList().length;
   document.getElementById('dueN').textContent=dn;
   document.getElementById('btnRev').disabled = dn===0;
@@ -234,6 +265,7 @@ function renderHome(){
 }
 
 function quit(){
+  clearInterval(qTicker); qTicker=null;
   document.getElementById('card').style.display='none';
   document.getElementById('home').style.display='block';
   renderHome();
@@ -263,6 +295,7 @@ function load(){
   document.getElementById('tag').textContent=`${cur.ch}章 ${cur.cat}・p.${cur.page}`;
   document.getElementById('cnt').textContent=`${idx+1} / ${pool.length}　${LV[box(cur.id)]}`;
   document.getElementById('fb').style.display='none';
+  startTimer();
   if(cur.t==='ox'){
     document.getElementById('qtext').innerHTML=cur.q;
     document.getElementById('oxbtns').style.display='flex';
@@ -290,9 +323,10 @@ function feedback(ok,correctLabel){
     +(cur.detail?`<div class="detail">${cur.detail}</div>`:'')
     +refLine(cur.page);
   document.getElementById('fb').style.display='block';
+  const sec=stopTimer();
   // 自動記録する。初回正解=覚えた／以降の正解=1段階上げる／不正解=どこからでも要復習
-  apply(ok ? nextBox(box(cur.id)) : 1, false);
-  showRec();
+  apply(ok ? nextBox(box(cur.id)) : 1, false, sec);
+  showRec(sec);
   document.getElementById('selfrate').style.display='block';
   document.getElementById('nextBtn').textContent=(idx===pool.length-1)?'ホームへ →':'次の問題 →';
 }
@@ -302,21 +336,23 @@ function ansSel(v){ if(answered)return; feedback(v===cur._ans, cur._ans); }
 /* 正解時の遷移。未学習からの初回正解は「覚えた」まで一気に上げる */
 function nextBox(b){ return b===0 ? 3 : Math.min(b+1,4); }
 
-function apply(b,recount){
+function apply(b,recount,sec){
   S.p[cur.id]={b:b,at:new Date().toISOString()};
-  if(!recount) S.n++;
+  if(!recount){ S.n++; S.t+=(sec||0); }
   saveS();
 }
-function showRec(){
+function showRec(sec){
   const b=box(cur.id);
   const left=4-b;
   document.getElementById('rec').innerHTML =
-    `記録: <b>${LV[b]}</b>` + (b>=4?'（復習不要）':`（完璧まであと${left}回）`);
+    `記録: <b>${LV[b]}</b>` + (b>=4?'（復習不要）':`（完璧まであと${left}回）`)
+    + (typeof sec==='number' ? `　⏱ <b>${fmt(sec)}</b>` : '');
   for(let i=1;i<=4;i++){
     document.getElementById('rb'+i).className = (i===b?'on':'');
   }
 }
 function rate(b){ if(!answered)return; apply(b,true); showRec(); }
+
 
 function next(){
   idx++;
@@ -329,7 +365,7 @@ function next(){
 }
 function resetAll(){
   if(!confirm('この端末の学習記録をすべて消します。よろしいですか？'))return;
-  S={p:{},day:today(),n:0};saveS();renderHome();
+  S={p:{},day:today(),n:0,t:0};saveS();renderHome();
 }
 renderHome();
 </script>
