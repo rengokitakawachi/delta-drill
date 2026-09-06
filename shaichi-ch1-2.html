@@ -290,14 +290,17 @@ function feedback(ok,correctLabel){
     +(cur.detail?`<div class="detail">${cur.detail}</div>`:'')
     +refLine(cur.page);
   document.getElementById('fb').style.display='block';
-  // 秒トレと同じく自動記録する。正解=1段階上げる／不正解=要復習へ落とす
-  apply(ok ? Math.min(box(cur.id)+1,4) : 1, false);
+  // 自動記録する。初回正解=覚えた／以降の正解=1段階上げる／不正解=どこからでも要復習
+  apply(ok ? nextBox(box(cur.id)) : 1, false);
   showRec();
   document.getElementById('selfrate').style.display='block';
   document.getElementById('nextBtn').textContent=(idx===pool.length-1)?'ホームへ →':'次の問題 →';
 }
 function ans(v){ if(answered)return; feedback(v===cur.a, cur.a?'⚪︎（正しい）':'✕（誤り）'); }
 function ansSel(v){ if(answered)return; feedback(v===cur._ans, cur._ans); }
+
+/* 正解時の遷移。未学習からの初回正解は「覚えた」まで一気に上げる */
+function nextBox(b){ return b===0 ? 3 : Math.min(b+1,4); }
 
 function apply(b,recount){
   S.p[cur.id]={b:b,at:new Date().toISOString()};
