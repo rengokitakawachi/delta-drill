@@ -95,7 +95,7 @@ border-radius:9px;padding:10px;font-size:12px;font-weight:700;cursor:pointer}
 <div class="wrap">
 <header>
   <h1>社一 1〜3章 定着ドリル</h1>
-  <div class="sub">2027年版（第59回対策）／⑩基礎講座 社会保険に関する一般常識 p.9〜p.62</div>
+  <div class="sub">2027年版（第59回対策）／⑩基礎講座 社会保険に関する一般常識 p.9〜p.87</div>
 </header>
 
 <div id="home">
@@ -319,6 +319,10 @@ function renderHome(){
 const FBCFG={apiKey:"AIzaSyAdU1F-JtSC4j-wvqbaUJGTIosW6mOkEck",authDomain:"sharoushi-quiz-73790.firebaseapp.com",projectId:"sharoushi-quiz-73790",storageBucket:"sharoushi-quiz-73790.firebasestorage.app",messagingSenderId:"859893882829",appId:"1:859893882829:web:b2d05225c3c7acf6612e84"};
 const FIELD='shaichi_ch12';
 let fbReady=false, syncDoc=null, unsub=null, pushTimer=null, applyingRemote=false;
+/* 初回スナップショットを受け取るまでは絶対に push しない。
+   受け取る前に push すると、この端末の空の記録がクラウド側の記録を上書きして消す。 */
+let firstSnap=false, remoteN=0, allowEmptyPush=false;
+function nP(o){ return o?Object.keys(o).length:0; }
 function syncCode(){try{return localStorage.getItem('sync_code')||'';}catch(e){return '';}}
 function setSt(t,c){const el=document.getElementById('syncst'); if(el){el.textContent=t; el.className='st '+(c||'');}}
 function saveSync(){
@@ -336,6 +340,7 @@ function initFB(){
 }
 function connectSync(){
   if(unsub){ unsub(); unsub=null; }
+  firstSnap=false; remoteN=0;
   if(!fbReady) return;
   const code=syncCode();
   if(!code){ syncDoc=null; setSt('オフ（同期コード未設定）',''); return; }
@@ -343,13 +348,16 @@ function connectSync(){
   try{
     syncDoc=firebase.firestore().collection('sync').doc(code);
     unsub=syncDoc.onSnapshot(snap=>{
-      setSt('● 同期中','ok');
       const d=(snap.exists && snap.data() && snap.data()[FIELD]) || null;
-      if(!d){ pushNow(); return; }
-      if(mergeRemote(d)){ saveS(); renderHome(); }
+      remoteN=nP(d&&d.p);
+      const changed = d ? mergeRemote(d) : false;
+      firstSnap=true;                       // ここで初めて push を解禁する
+      if(changed){ saveS(); renderHome(); }
+      setSt(`● 同期中（クラウド ${remoteN}問 / この端末 ${nP(S.p)}問）`,'ok');
       pushNow();
     }, ()=>setSt('接続エラー','err'));
-    pushNow();
+    /* ここで pushNow() を呼ばない。
+       旧版は接続直後に push しており、記録が空の端末で開くとクラウドの記録を消していた。 */
   }catch(e){ setSt('接続エラー','err'); }
 }
 /* 問題ごとに at（最終更新時刻）が新しい方を採る。
@@ -368,6 +376,14 @@ function mergeRemote(d){
 }
 function pushNow(){
   if(!syncDoc) return;
+  if(!firstSnap) return;                    // クラウドを読む前に書かない
+  /* 保護: この端末が空でクラウドに記録があるときは送らない（消さない）。
+     「学習記録をリセット」を押したときだけ、その1回に限り空の送信を許す。 */
+  if(nP(S.p)===0 && remoteN>0 && !allowEmptyPush){
+    setSt(`● 同期中（保護: この端末は空のため、クラウドの ${remoteN}問 を上書きしません）`,'ok');
+    return;
+  }
+  allowEmptyPush=false;
   try{ syncDoc.set({[FIELD]:{p:S.p, day:S.day, n:S.n, t:S.t, ts:Date.now()}},{merge:true}); }catch(e){}
 }
 function schedulePush(){ if(!syncDoc) return; clearTimeout(pushTimer); pushTimer=setTimeout(pushNow,1500); }
@@ -499,6 +515,7 @@ function next(){
 }
 function resetAll(){
   if(!confirm('この端末の学習記録をすべて消します。よろしいですか？'))return;
+  allowEmptyPush=true;                      // 意図したリセットなのでクラウドにも反映する
   S={p:{},day:today(),n:0,t:0};saveS();renderHome();
 }
 (function(){
