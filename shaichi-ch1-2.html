@@ -216,7 +216,7 @@ const Q = [{"t": "ox", "ch": 1, "law": "社会保障・統計", "cat": "社会�
 /* 版スタンプ。VER は「この行を伏せたファイル内容」の sha256 先頭8桁で、
    npm test（scripts/version-stamp.mjs）が一致を強制する。
    内容を変えれば必ず変わるので、画面の値を見れば新旧を判別できる。 */
-const VER='59c8df71';
+const VER='ce151b61';
 const KEY='dd_shaichi_ch12_v1';
 const LV=['未学習','要復習','不安あり','覚えた','完璧'];
 const LVC=['#64748b','#ef4444','#eab308','#22c55e','#3b82f6'];
@@ -226,8 +226,25 @@ const GOAL=20;
 
 function today(){const d=new Date();return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');}
 function loadS(){try{return JSON.parse(localStorage.getItem(KEY))||{p:{},day:'',n:0};}catch(e){return {p:{},day:'',n:0};}}
+const LOG_KEEP_DAYS=180;   // 日別ログの保持期間
+function pruneLog(o){
+  if(!o) return {};
+  const lim=new Date(Date.now()-LOG_KEEP_DAYS*86400000).toISOString().slice(0,10);
+  for(const d in o) if(d<lim) delete o[d];
+  return o;
+}
 function saveS(){try{localStorage.setItem(KEY,JSON.stringify(S));}catch(e){} if(typeof schedulePush==='function') schedulePush();}
 let S=loadS();
+/* daily（日付→解答数）と log（日付→秒）は総合版と同じ形。
+   n/t は日付が変わると 0 に戻るため、確定した日の値をここに残す。
+   GitHub Actions の delta-study-sync がこれを読んで app history log に書き出す。 */
+if(!S.daily||typeof S.daily!=='object') S.daily={};
+if(!S.log||typeof S.log!=='object') S.log={};
+if(S.day && S.day!==today() && S.n>0){   // 日付が変わる前に、その日の値を確定させる
+  S.daily[S.day]=Math.max(S.daily[S.day]||0,S.n);
+  S.log[S.day]=Math.max(S.log[S.day]||0,S.t||0);
+}
+pruneLog(S.daily); pruneLog(S.log);
 if(S.day!==today()){S.day=today();S.n=0;S.t=0;saveS();}
 if(typeof S.t!=='number') S.t=0;
 
@@ -380,6 +397,17 @@ function mergeRemote(d){
     if((d.n||0)>S.n){ S.n=d.n; ch=true; }
     if((d.t||0)>S.t){ S.t=d.t; ch=true; }
   }
+  /* 日別ログは日付ごとに大きい方を採る。
+     端末をまたいで同じ日を二重計上しないための選択（合算にしない）。 */
+  for(const k of ['daily','log']){
+    if(!d[k]) continue;
+    for(const dt in d[k]){
+      const r=d[k][dt]||0;
+      if(r>((S[k]||{})[dt]||0)){ S[k][dt]=r; ch=true; }
+    }
+  }
+  S.daily[S.day]=Math.max(S.daily[S.day]||0,S.n);
+  S.log[S.day]=Math.max(S.log[S.day]||0,S.t);
   return ch;
 }
 function pushNow(){
@@ -392,7 +420,7 @@ function pushNow(){
     return;
   }
   allowEmptyPush=false;
-  try{ syncDoc.set({[FIELD]:{p:S.p, day:S.day, n:S.n, t:S.t, ts:Date.now()}},{merge:true}); }catch(e){}
+  try{ syncDoc.set({[FIELD]:{p:S.p, day:S.day, n:S.n, t:S.t, daily:S.daily, log:S.log, ts:Date.now()}},{merge:true}); }catch(e){}
 }
 function schedulePush(){ if(!syncDoc) return; clearTimeout(pushTimer); pushTimer=setTimeout(pushNow,1500); }
 
@@ -415,7 +443,7 @@ function bkImport(merge){
     msg.textContent=`統合しました（新規${add}件・更新${upd}件）`;
   }else{
     if(!confirm('この端末の記録を、貼り付けた内容で置き換えます。よろしいですか？')) return;
-    S={p:d.p, day:today(), n:d.day===today()?(d.n||0):0, t:d.day===today()?(d.t||0):0};
+    S={p:d.p, day:today(), n:d.day===today()?(d.n||0):0, t:d.day===today()?(d.t||0):0, daily:d.daily||{}, log:d.log||{}};
     msg.textContent='置き換えました。';
   }
   saveS(); renderHome();
@@ -502,6 +530,8 @@ function nextBox(b){ return b===0 ? 3 : Math.min(b+1,4); }
 function apply(b,recount,sec){
   S.p[cur.id]={b:b,at:new Date().toISOString()};
   if(!recount){ S.n++; S.t+=(sec||0); }
+  // 当日分を日別ログにも書く。日付を跨いでアプリを開かなくても記録が残る
+  S.daily[S.day]=S.n; S.log[S.day]=S.t;
   saveS();
 }
 function showRec(sec){
@@ -529,7 +559,7 @@ function next(){
 function resetAll(){
   if(!confirm('この端末の学習記録をすべて消します。よろしいですか？'))return;
   allowEmptyPush=true;                      // 意図したリセットなのでクラウドにも反映する
-  S={p:{},day:today(),n:0,t:0};saveS();renderHome();
+  S={p:{},day:today(),n:0,t:0,daily:{},log:{}};saveS();renderHome();
 }
 (function(){
   let ok=true;
