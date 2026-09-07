@@ -5,7 +5,9 @@
   "scripts": {
     "build": "node build/build.cjs",
     "map": "node scripts/repo-map.mjs",
-    "check": "node scripts/build-check.mjs",
-    "test": "node scripts/build-check.mjs"
+    "check": "node scripts/build-check.mjs && node scripts/check-version-stamp.mjs",
+    "test": "node scripts/build-check.mjs && node scripts/check-version-stamp.mjs",
+    "check:version": "node scripts/check-version-stamp.mjs",
+    "version:fix": "node scripts/version-stamp.mjs --fix"
   }
 }
