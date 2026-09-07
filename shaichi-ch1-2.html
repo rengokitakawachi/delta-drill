@@ -216,7 +216,7 @@ const Q = [{"t": "ox", "ch": 1, "law": "社会保障・統計", "cat": "社会�
 /* 版スタンプ。VER は「この行を伏せたファイル内容」の sha256 先頭8桁で、
    npm test（scripts/version-stamp.mjs）が一致を強制する。
    内容を変えれば必ず変わるので、画面の値を見れば新旧を判別できる。 */
-const VER='a9c56cc8';
+const VER='59c8df71';
 const KEY='dd_shaichi_ch12_v1';
 const LV=['未学習','要復習','不安あり','覚えた','完璧'];
 const LVC=['#64748b','#ef4444','#eab308','#22c55e','#3b82f6'];
@@ -459,10 +459,15 @@ function load(){
     document.getElementById('oxbtns').style.display='flex';
     document.getElementById('chbtns').style.display='none';
   }else{
+    /* 空欄が複数ある問題では、出題する1つ目だけを空欄にし、
+       残りは正解で埋める。旧版は1つ目しか置換せず、2つ目以降が
+       選択肢ごと（【A|B|C|D】）画面に出て答えが漏れていた。 */
     const m=cur.text.match(/【(.+?)】/);
     const opts=shuffle(m[1].split('|'));
     cur._ans=m[1].split('|')[0];
-    document.getElementById('qtext').innerHTML=cur.text.replace(/【.+?】/,'<b>（　　　）</b>');
+    let k=0;
+    const body=cur.text.replace(/【(.+?)】/g,(mm,g)=> (k++===0) ? '<b>（　　　）</b>' : g.split('|')[0]);
+    document.getElementById('qtext').innerHTML=body;
     const cb=document.getElementById('chbtns');
     cb.innerHTML=opts.map(o=>`<button onclick="ansSel(this.dataset.v)" data-v="${o}">${o}</button>`).join('');
     document.getElementById('oxbtns').style.display='none';cb.style.display='flex';
