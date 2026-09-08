@@ -194,7 +194,7 @@ border-radius:9px;padding:10px;font-size:12px;font-weight:700;cursor:pointer}
     ○× 160問／選択式 65問・計225問<br>
     進捗率は 完璧1.0／覚えた0.75／不安あり0.5／要復習0.25／未学習0 の加重平均<br>
     <span class="link" onclick="resetAll()">学習記録をリセット</span><br>
-    <span id="ver" class="ver"></span>　<span class="link" onclick="showBoot()">読み込み履歴</span>
+    <span id="ver" class="ver"></span>　<span class="link" onclick="showBoot()">診断ログ</span>　<span class="link" onclick="clearLog()">ログを消す</span>
     <pre id="bootlog" style="display:none;text-align:left;font-size:10px;line-height:1.7;color:#94a3b8;background:#0f172a;border:1px solid #1e293b;border-radius:8px;padding:8px;margin:8px 0;overflow-x:auto"></pre>
   </footer>
 </div>
@@ -238,7 +238,7 @@ const Q = [{"t": "ox", "ch": 1, "law": "社会保障・統計", "cat": "社会�
 /* 版スタンプ。VER は「この行を伏せたファイル内容」の sha256 先頭8桁で、
    npm test（scripts/version-stamp.mjs）が一致を強制する。
    内容を変えれば必ず変わるので、画面の値を見れば新旧を判別できる。 */
-const VER='72aa0054';
+const VER='86fed976';
 const KEY='dd_shaichi_ch12_v1';
 const LV=['未学習','要復習','不安あり','覚えた','完璧'];
 const LVC=['#64748b','#ef4444','#eab308','#22c55e','#3b82f6'];
@@ -255,7 +255,11 @@ function pruneLog(o){
   for(const d in o) if(d<lim) delete o[d];
   return o;
 }
-function saveS(){try{localStorage.setItem(KEY,JSON.stringify(S));}catch(e){} if(typeof schedulePush==='function') schedulePush();}
+function saveS(){
+  try{localStorage.setItem(KEY,JSON.stringify(S));}
+  catch(e){ if(typeof lg==='function') lg('save_fail',String(e).slice(0,60)); }
+  if(typeof schedulePush==='function') schedulePush();
+}
 let S=loadS();
 /* daily（日付→解答数）と log（日付→秒）は総合版と同じ形。
    n/t は日付が変わると 0 に戻るため、確定した日の値をここに残す。
@@ -373,7 +377,7 @@ const FIELD='shaichi_ch12';
 let fbReady=false, syncDoc=null, unsub=null, pushTimer=null, applyingRemote=false;
 /* 初回スナップショットを受け取るまでは絶対に push しない。
    受け取る前に push すると、この端末の空の記録がクラウド側の記録を上書きして消す。 */
-let firstSnap=false, remoteN=0, allowEmptyPush=false;
+let firstSnap=false, remoteN=0, allowEmptyPush=false, remoteDiag=null;
 function nP(o){ return o?Object.keys(o).length:0; }
 function syncCode(){try{return localStorage.getItem('sync_code')||'';}catch(e){return '';}}
 function setSt(t,c){const el=document.getElementById('syncst'); if(el){el.textContent=t; el.className='st '+(c||'');}}
@@ -399,9 +403,11 @@ function connectSync(){
   setSt('接続中…','');
   try{
     syncDoc=firebase.firestore().collection('sync').doc(code);
+    lg('sync_connect',{code:code.length});
     unsub=syncDoc.onSnapshot(snap=>{
       const d=(snap.exists && snap.data() && snap.data()[FIELD]) || null;
       remoteN=nP(d&&d.p);
+      lg('snapshot',{remote:remoteN, local:nP(S.p), exists:!!snap.exists, first:!firstSnap});
       const changed = d ? mergeRemote(d) : false;
       firstSnap=true;                       // ここで初めて push を解禁する
       if(changed){ saveS(); renderHome(); }
@@ -416,6 +422,7 @@ function connectSync(){
    間違えて要復習へ落ちた記録も正しく伝播する（段階の大小では判定しない） */
 function mergeRemote(d){
   let ch=false;
+  if(d.diag&&Array.isArray(d.diag)) remoteDiag=d.diag;
   if(d.p) for(const id in d.p){
     const r=d.p[id]||{}, l=S.p[id];
     if(!l || (r.at||'')>(l.at||'')){ S.p[id]={b:r.b||0, at:r.at||''}; ch=true; }
@@ -443,11 +450,15 @@ function pushNow(){
   /* 保護: この端末が空でクラウドに記録があるときは送らない（消さない）。
      「学習記録をリセット」を押したときだけ、その1回に限り空の送信を許す。 */
   if(nP(S.p)===0 && remoteN>0 && !allowEmptyPush){
+    lg('push_blocked',{remote:remoteN});
     setSt(`● 同期中（保護: この端末は空のため、クラウドの ${remoteN}問 を上書きしません）`,'ok');
     return;
   }
   allowEmptyPush=false;
-  try{ syncDoc.set({[FIELD]:{p:S.p, day:S.day, n:S.n, t:S.t, daily:S.daily, log:S.log, ts:Date.now()}},{merge:true}); }catch(e){}
+  /* 診断ログの末尾もクラウドへ逃がす。localStorage ごと消えても後から読める */
+  try{ syncDoc.set({[FIELD]:{p:S.p, day:S.day, n:S.n, t:S.t, daily:S.daily, log:S.log,
+       diag:readLog().slice(-60), ts:Date.now()}},{merge:true}); }
+  catch(e){ lg('push_fail',String(e).slice(0,60)); }
 }
 function schedulePush(){ if(!syncDoc) return; clearTimeout(pushTimer); pushTimer=setTimeout(pushNow,1500); }
 /* 送信は1.5秒のデバウンス後なので、解答直後に画面を離れると未送信のまま終わる。
@@ -484,6 +495,7 @@ function bkImport(merge){
 }
 
 function quit(){
+  lg('quit',{idx:idx,n:pool?pool.length:0});     // 中断ボタンが押された
   clearInterval(qTicker); qTicker=null;
   saveSession();                      // 中断でも続きから戻れるようにする
   document.getElementById('spot').style.display='none';
@@ -498,6 +510,27 @@ let pool=[],idx=0,cur=null,answered=false;
    「全問終了」と「✕ 中断」しかないため、原因はページの再読込か中断の誤タップ。
    いずれの場合も pool / idx がメモリ上にしかなく、途中の状態が失われていた。
    状態を保存し、ホームから続きに戻れるようにする。 */
+/* ===== 診断ログ =====
+   「勝手にリセットされる」事象の原因を突き止めるための記録。
+   localStorage ごと消える可能性があるため、クラウド（Firestore）にも逃がす。
+   SID はこの読み込み固有の識別子。行の SID が変われば、そこでページが読み直されている。 */
+const LOGK=KEY+'_log';
+const SID=Math.random().toString(36).slice(2,7);
+let logMem=[];
+function lg(e,d){
+  const row={t:Date.now(),s:SID,e:e};
+  if(d!==undefined&&d!==null) row.d=d;
+  logMem.push(row);
+  try{
+    const a=JSON.parse(localStorage.getItem(LOGK)||'[]');
+    a.push(row);
+    localStorage.setItem(LOGK,JSON.stringify(a.slice(-400)));
+  }catch(err){ logMem.push({t:Date.now(),s:SID,e:'log_write_fail',d:String(err).slice(0,60)}); }
+  if(typeof schedulePush==='function') schedulePush();
+}
+function readLog(){
+  try{ return JSON.parse(localStorage.getItem(LOGK)||'[]'); }catch(e){ return logMem; }
+}
 const SKEY=KEY+'_session';
 function saveSession(){
   try{
@@ -525,17 +558,31 @@ function resume(){
   load();
 }
 
-/* 読み込みの記録。再読込か通常の遷移かを後から判別できるようにする。
-   直近10件だけ残す（原因の切り分け用） */
+/* 起動時の状態を丸ごと記録する。
+   リセットが起きたとき、直前の行と比べれば何が消えたか分かる。 */
 (function(){
+  let nav='?', st={};
+  try{ nav=(performance.getEntriesByType('navigation')[0]||{}).type||'?'; }catch(e){}
   try{
-    const nav=(performance.getEntriesByType('navigation')[0]||{}).type||'unknown';
-    const k=KEY+'_boot';
-    const a=JSON.parse(localStorage.getItem(k)||'[]');
-    a.push({t:new Date().toISOString(),nav:nav,mid:!!localStorage.getItem(SKEY)});
-    localStorage.setItem(k,JSON.stringify(a.slice(-10)));
-  }catch(e){}
+    const raw=localStorage.getItem(KEY);
+    const o=raw?JSON.parse(raw):null;
+    st={p:o&&o.p?Object.keys(o.p).length:0, n:o?o.n:null, t:o?Math.round(o.t||0):null,
+        day:o?o.day:null, daily:o&&o.daily?Object.keys(o.daily).length:0,
+        raw:raw?raw.length:0, sess:!!localStorage.getItem(SKEY),
+        code:!!localStorage.getItem('sync_code'), keys:Object.keys(localStorage).length};
+  }catch(e){ st={err:String(e).slice(0,60)}; }
+  lg('boot',{nav:nav, vis:document.visibilityState, ver:VER, ...st});
 })();
+
+/* 失われ方を捉えるためのイベント記録 */
+window.addEventListener('error',ev=>lg('js_error',{m:String(ev.message).slice(0,90),f:String(ev.filename||'').slice(-24),l:ev.lineno}));
+window.addEventListener('unhandledrejection',ev=>lg('promise_reject',{m:String(ev.reason).slice(0,90)}));
+document.addEventListener('visibilitychange',()=>lg('vis',document.visibilityState));
+window.addEventListener('pagehide',ev=>lg('pagehide',{persisted:ev.persisted}));
+window.addEventListener('pageshow',ev=>lg('pageshow',{persisted:ev.persisted}));
+window.addEventListener('freeze',()=>lg('freeze'));
+window.addEventListener('resume',()=>lg('resume_evt'));
+window.addEventListener('storage',ev=>lg('storage_evt',{k:ev.key,newNull:ev.newValue===null}));
 
 function shuffle(a){for(let i=a.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[a[i],a[j]]=[a[j],a[i]];}return a;}
 
@@ -551,7 +598,8 @@ function start(mode){
     pool=d.concat(n,rest).slice(0,GOAL);
   }
   if(!pool.length){alert('対象の問題がありません');return;}
-  idx=0;document.getElementById('home').style.display='none';
+  idx=0;lg('start',{mode:mode,n:pool.length});
+  document.getElementById('home').style.display='none';
   document.getElementById('card').style.display='flex';load();saveSession();
 }
 
@@ -690,6 +738,7 @@ function ansSel(v){ if(answered)return; feedback(v===cur._ans, cur._ans); }
 function nextBox(b){ return b===0 ? 3 : Math.min(b+1,4); }
 
 function apply(b,recount,sec){
+  if(!recount) lg('ans',{id:cur.id,b:b,p:Object.keys(S.p).length+1,n:S.n+1});
   S.p[cur.id]={b:b,at:new Date().toISOString()};
   if(!recount){ S.n++; S.t+=(sec||0); }
   // 当日分を日別ログにも書く。日付を跨いでアプリを開かなくても記録が残る
@@ -713,6 +762,7 @@ function next(){
   idx++;
   saveSession();
   if(idx>=pool.length){
+    lg('finish',{n:pool.length});
     clearSession();
     document.getElementById('card').style.display='none';
     document.getElementById('home').style.display='block';
@@ -720,21 +770,40 @@ function next(){
   }
   load();
 }
-/* 読み込み履歴を表示する。画面が消えてトップに戻る事象の原因切り分け用。
-   nav=reload なら再読込、navigate なら通常の遷移（＝中断ボタン等）。
-   mid=true は「出題の途中だった」ことを示す。 */
+/* 診断ログの表示。
+   1行 = 「時刻  SID  出来事  詳細」。SID が変わった行でページが読み直されている。
+   コピー用に全文を textarea にも出す。 */
+function fmtLog(a){
+  let last=null;
+  return a.map(x=>{
+    const d=new Date(x.t), p=n=>String(n).padStart(2,'0');
+    const head=`${p(d.getMonth()+1)}/${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`;
+    const mark = (last!==null && x.s!==last) ? ' ▼読み直し' : '';
+    last=x.s;
+    return `${head} [${x.s}]${mark} ${x.e}` + (x.d!==undefined&&x.d!==null?' '+JSON.stringify(x.d):'');
+  }).join('\n');
+}
 function showBoot(){
   const el=document.getElementById('bootlog');
   if(el.style.display==='block'){ el.style.display='none'; return; }
-  let a=[];
-  try{ a=JSON.parse(localStorage.getItem(KEY+'_boot')||'[]'); }catch(e){}
-  el.textContent = a.length
-    ? a.map(x=>`${x.t.slice(5,19).replace('T',' ')}  ${x.nav}${x.mid?'  ← 出題の途中で読み込まれた':''}`).join('\n')
-    : '記録なし';
+  const loc=readLog();
+  let out='── この端末の記録（'+loc.length+'件）──\n'+(loc.length?fmtLog(loc.slice(-120)):'記録なし');
+  if(remoteDiag&&remoteDiag.length){
+    out+='\n\n── クラウドに残っている記録（'+remoteDiag.length+'件）──\n'+fmtLog(remoteDiag);
+  }
+  el.textContent=out;
   el.style.display='block';
+  const ta=document.getElementById('bk');
+  if(ta){ ta.value=out; document.getElementById('bkmsg').textContent='ログをコピー欄に出しました。全文をコピーして渡してください。'; }
+}
+function clearLog(){
+  if(!confirm('診断ログを消します。学習記録は消えません。よろしいですか？'))return;
+  try{ localStorage.removeItem(LOGK); }catch(e){}
+  logMem=[]; document.getElementById('bootlog').style.display='none';
 }
 function resetAll(){
   if(!confirm('この端末の学習記録をすべて消します。よろしいですか？'))return;
+  lg('resetAll',{p:Object.keys(S.p).length});    // 明示的なリセット
   allowEmptyPush=true;                      // 意図したリセットなのでクラウドにも反映する
   S={p:{},day:today(),n:0,t:0,daily:{},log:{}};saveS();renderHome();
 }
