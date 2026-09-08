@@ -216,7 +216,7 @@ const Q = [{"t": "ox", "ch": 1, "law": "社会保障・統計", "cat": "社会�
 /* 版スタンプ。VER は「この行を伏せたファイル内容」の sha256 先頭8桁で、
    npm test（scripts/version-stamp.mjs）が一致を強制する。
    内容を変えれば必ず変わるので、画面の値を見れば新旧を判別できる。 */
-const VER='ce151b61';
+const VER='322549b7';
 const KEY='dd_shaichi_ch12_v1';
 const LV=['未学習','要復習','不安あり','覚えた','完璧'];
 const LVC=['#64748b','#ef4444','#eab308','#22c55e','#3b82f6'];
@@ -423,6 +423,13 @@ function pushNow(){
   try{ syncDoc.set({[FIELD]:{p:S.p, day:S.day, n:S.n, t:S.t, daily:S.daily, log:S.log, ts:Date.now()}},{merge:true}); }catch(e){}
 }
 function schedulePush(){ if(!syncDoc) return; clearTimeout(pushTimer); pushTimer=setTimeout(pushNow,1500); }
+/* 送信は1.5秒のデバウンス後なので、解答直後に画面を離れると未送信のまま終わる。
+   2026-09-07 に実際これが起き、最後の2問がクラウドに届かず app log が 15問→13問 になった。
+   画面が隠れる／離れる時点で、待たずに即送信する。 */
+function flushPush(){ if(!syncDoc) return; clearTimeout(pushTimer); pushNow(); }
+document.addEventListener('visibilitychange',()=>{ if(document.visibilityState==='hidden') flushPush(); });
+window.addEventListener('pagehide',flushPush);
+window.addEventListener('blur',flushPush);
 
 /* ===== バックアップ ===== */
 function bkExport(){
