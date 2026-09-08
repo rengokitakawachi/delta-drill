@@ -242,7 +242,7 @@ const Q = [{"t": "ox", "ch": 1, "law": "社会保障・統計", "cat": "社会�
 /* 版スタンプ。VER は「この行を伏せたファイル内容」の sha256 先頭8桁で、
    npm test（scripts/version-stamp.mjs）が一致を強制する。
    内容を変えれば必ず変わるので、画面の値を見れば新旧を判別できる。 */
-const VER='aeccee2c';
+const VER='78930c21';
 const KEY='dd_shaichi_ch12_v1';
 const LV=['未学習','要復習','不安あり','覚えた','完璧'];
 const LVC=['#64748b','#ef4444','#eab308','#22c55e','#3b82f6'];
@@ -555,7 +555,9 @@ const SKEY=KEY+'_session';
 function saveSession(){
   try{
     if(!pool||!pool.length||idx>=pool.length){ localStorage.removeItem(SKEY); return; }
-    localStorage.setItem(SKEY,JSON.stringify({ids:pool.map(q=>q.id),idx:idx,at:Date.now()}));
+    /* done は「idx の問題に回答済みか」。
+       回答後に中断して再開したとき、同じ問題をもう一度出さないために持つ。 */
+    localStorage.setItem(SKEY,JSON.stringify({ids:pool.map(q=>q.id),idx:idx,done:!!answered,at:Date.now()}));
   }catch(e){}
 }
 function clearSession(){ try{ localStorage.removeItem(SKEY); }catch(e){} }
@@ -566,8 +568,10 @@ function loadSession(){
     if(Date.now()-(d.at||0) > 12*3600*1000){ clearSession(); return null; }  // 12時間で失効
     const byId={}; Q.forEach(q=>byId[q.id]=q);
     const ids=d.ids.filter(i=>byId[i]);
-    if(!ids.length||d.idx>=ids.length) { clearSession(); return null; }
-    return {pool:ids.map(i=>byId[i]), idx:d.idx};
+    // 回答済みの問題で中断していたら、その次から再開する
+    const at = d.done ? d.idx+1 : d.idx;
+    if(!ids.length||at>=ids.length) { clearSession(); return null; }   // 最後の問題を解き終えていた
+    return {pool:ids.map(i=>byId[i]), idx:at};
   }catch(e){ return null; }
 }
 function resume(){
@@ -732,6 +736,7 @@ function feedback(ok,correctLabel){
     +(cur.detail?`<div class="detail">${cur.detail}</div>`:'')
     +refLine(cur.page);
   const sec=stopTimer();
+  saveSession();                        // 回答済みであることを残す（中断→再開で同じ問題に戻らない）
   /* 正しく × と答えたときだけ、誤り箇所を問う。
      〇 の問題や、× を見抜けなかったときは挟まない（答えを教えることになるため）。 */
   const sp=document.getElementById('spot');
