@@ -238,7 +238,7 @@ const Q = [{"t": "ox", "ch": 1, "law": "社会保障・統計", "cat": "社会�
 /* 版スタンプ。VER は「この行を伏せたファイル内容」の sha256 先頭8桁で、
    npm test（scripts/version-stamp.mjs）が一致を強制する。
    内容を変えれば必ず変わるので、画面の値を見れば新旧を判別できる。 */
-const VER='694e2d00';
+const VER='da7068a9';
 const KEY='dd_shaichi_ch12_v1';
 const LV=['未学習','要復習','不安あり','覚えた','完璧'];
 const LVC=['#64748b','#ef4444','#eab308','#22c55e','#3b82f6'];
@@ -378,6 +378,7 @@ let fbReady=false, syncDoc=null, unsub=null, pushTimer=null, applyingRemote=fals
 /* 初回スナップショットを受け取るまでは絶対に push しない。
    受け取る前に push すると、この端末の空の記録がクラウド側の記録を上書きして消す。 */
 let firstSnap=false, remoteN=0, allowEmptyPush=false, remoteDiag=null;
+let lastPushed='', snapN=0;      // lastPushed: 直前に送った内容 / snapN: スナップショット受信数
 function nP(o){ return o?Object.keys(o).length:0; }
 function syncCode(){try{return localStorage.getItem('sync_code')||'';}catch(e){return '';}}
 function setSt(t,c){const el=document.getElementById('syncst'); if(el){el.textContent=t; el.className='st '+(c||'');}}
@@ -396,7 +397,7 @@ function initFB(){
 }
 function connectSync(){
   if(unsub){ unsub(); unsub=null; }
-  firstSnap=false; remoteN=0;
+  firstSnap=false; remoteN=0; lastPushed=''; snapN=0;
   if(!fbReady) return;
   const code=syncCode();
   if(!code){ syncDoc=null; setSt('オフ（同期コード未設定）',''); return; }
@@ -407,12 +408,21 @@ function connectSync(){
     unsub=syncDoc.onSnapshot(snap=>{
       const d=(snap.exists && snap.data() && snap.data()[FIELD]) || null;
       remoteN=nP(d&&d.p);
-      lg('snapshot',{remote:remoteN, local:nP(S.p), exists:!!snap.exists, first:!firstSnap});
+      const wasFirst=!firstSnap;
       const changed = d ? mergeRemote(d) : false;
-      firstSnap=true;                       // ここで初めて push を解禁する
+      firstSnap=true;
+      snapN++;
+      // 記録するのは初回と、実際に取り込みが起きたときだけ。毎回書くとログが埋まる
+      if(wasFirst||changed) lg('snapshot',{remote:remoteN, local:nP(S.p), first:wasFirst, changed:changed});
+      else if(snapN===20) lg('snapshot_storm',{n:snapN});   // 想定外に多いときだけ1度警告                       // ここで初めて push を解禁する
       if(changed){ saveS(); renderHome(); }
       setSt(`● 同期中（クラウド ${remoteN}問 / この端末 ${nP(S.p)}問）`,'ok');
-      pushNow();
+      /* ここで pushNow() を呼ばない。
+         送信内容には ts が入るため必ず「変更」となり、スナップショットが返ってきて
+         また送信する——という無限ループになっていた（旧版から存在した不具合）。
+         送信は「手元の記録が変わったとき」（saveS→schedulePush）と、
+         初回スナップショットの直後の1回だけでよい。 */
+      if(wasFirst) pushNow();
     }, ()=>setSt('接続エラー','err'));
     /* ここで pushNow() を呼ばない。
        旧版は接続直後に push しており、記録が空の端末で開くとクラウドの記録を消していた。 */
@@ -455,9 +465,14 @@ function pushNow(){
     return;
   }
   allowEmptyPush=false;
-  /* 診断ログの末尾もクラウドへ逃がす。localStorage ごと消えても後から読める */
+  /* 学習記録の中身が前回と同じなら送らない。
+     ループが再発しても、ここで必ず止まる。診断ログは変化判定に入れない
+     （ログが増えただけで送信が起きると、それ自体がループの燃料になる）。 */
+  const body=JSON.stringify({p:S.p, day:S.day, n:S.n, t:S.t, daily:S.daily, log:S.log});
+  if(body===lastPushed) return;
+  lastPushed=body;
   try{ syncDoc.set({[FIELD]:{p:S.p, day:S.day, n:S.n, t:S.t, daily:S.daily, log:S.log,
-       diag:readLog().slice(-60), ts:Date.now()}},{merge:true}); }
+       diag:readLog().slice(-60), ts:Date.now()}},{merge:true}); lg('push',{p:nP(S.p),n:S.n}); }
   catch(e){ lg('push_fail',String(e).slice(0,60)); }
 }
 function schedulePush(){ if(!syncDoc) return; clearTimeout(pushTimer); pushTimer=setTimeout(pushNow,1500); }
@@ -526,7 +541,8 @@ function lg(e,d){
     a.push(row);
     localStorage.setItem(LOGK,JSON.stringify(a.slice(-400)));
   }catch(err){ logMem.push({t:Date.now(),s:SID,e:'log_write_fail',d:String(err).slice(0,60)}); }
-  if(typeof schedulePush==='function') schedulePush();
+  /* ここから push を呼ばない。
+     呼ぶと「ログを書く→送る→スナップショットが返る→ログを書く」で回り続ける。 */
 }
 function readLog(){
   try{ return JSON.parse(localStorage.getItem(LOGK)||'[]'); }catch(e){ return logMem; }
