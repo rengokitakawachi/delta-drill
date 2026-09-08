@@ -25,6 +25,8 @@ header .sub{font-size:11px;color:var(--sub);margin-bottom:10px}
 .goal{font-size:26px;font-weight:800;color:var(--acc)}
 .goal small{font-size:13px;color:var(--sub);font-weight:400}
 .btnrow{display:flex;flex-direction:column;gap:8px}
+.mbtn.resume{background:linear-gradient(135deg,#166534,#22c55e);border-color:#22c55e;color:#fff}
+.mbtn.resume small{color:#dcfce7}
 .mbtn{background:var(--card2);border:1px solid var(--line);color:var(--txt);border-radius:12px;
 padding:13px 14px;text-align:left;font-size:14px;font-weight:700;cursor:pointer}
 .mbtn small{display:block;font-weight:400;font-size:11px;color:var(--sub);margin-top:3px}
@@ -128,6 +130,8 @@ border-radius:9px;padding:10px;font-size:12px;font-weight:700;cursor:pointer}
     <div class="btnrow">
       <button class="mbtn primary" onclick="start('auto')">おまかせ出題
         <small>復習期限が来たものを優先し、足りない分を未学習から出します</small></button>
+      <button class="mbtn resume" id="btnResume" onclick="resume()" style="display:none">▶ 続きから
+        <small id="resumeN"></small></button>
       <button class="mbtn" id="btnRev" onclick="start('review')">復習優先出題
         <small><span id="dueN">0</span>問が復習期限に達しています</small></button>
       <button class="mbtn" onclick="start('ch1')">1章 社会保険の概要（p.9〜26）
@@ -190,7 +194,8 @@ border-radius:9px;padding:10px;font-size:12px;font-weight:700;cursor:pointer}
     ○× 160問／選択式 65問・計225問<br>
     進捗率は 完璧1.0／覚えた0.75／不安あり0.5／要復習0.25／未学習0 の加重平均<br>
     <span class="link" onclick="resetAll()">学習記録をリセット</span><br>
-    <span id="ver" class="ver"></span>
+    <span id="ver" class="ver"></span>　<span class="link" onclick="showBoot()">読み込み履歴</span>
+    <pre id="bootlog" style="display:none;text-align:left;font-size:10px;line-height:1.7;color:#94a3b8;background:#0f172a;border:1px solid #1e293b;border-radius:8px;padding:8px;margin:8px 0;overflow-x:auto"></pre>
   </footer>
 </div>
 
@@ -233,7 +238,7 @@ const Q = [{"t": "ox", "ch": 1, "law": "社会保障・統計", "cat": "社会�
 /* 版スタンプ。VER は「この行を伏せたファイル内容」の sha256 先頭8桁で、
    npm test（scripts/version-stamp.mjs）が一致を強制する。
    内容を変えれば必ず変わるので、画面の値を見れば新旧を判別できる。 */
-const VER='868c41c1';
+const VER='72aa0054';
 const KEY='dd_shaichi_ch12_v1';
 const LV=['未学習','要復習','不安あり','覚えた','完璧'];
 const LVC=['#64748b','#ef4444','#eab308','#22c55e','#3b82f6'];
@@ -342,6 +347,11 @@ function renderHome(){
   document.getElementById('c1n').textContent=`${Q.filter(q=>q.ch===1).length}問`;
   document.getElementById('c2n').textContent=`${Q.filter(q=>q.ch===2).length}問`;
   document.getElementById('c3n').textContent=`${Q.filter(q=>q.ch===3).length}問`;
+  const rs=loadSession(), rb=document.getElementById('btnResume');
+  if(rb){
+    rb.style.display = rs ? 'block' : 'none';
+    if(rs) document.getElementById('resumeN').textContent=`${rs.idx+1}問目から（全${rs.pool.length}問）`;
+  }
   const ov=document.getElementById('ov'), of=document.getElementById('of');
   if(ov&&document.activeElement!==ov) ov.value=obsVault();
   if(of&&document.activeElement!==of) of.value=obsFolder();
@@ -475,6 +485,7 @@ function bkImport(merge){
 
 function quit(){
   clearInterval(qTicker); qTicker=null;
+  saveSession();                      // 中断でも続きから戻れるようにする
   document.getElementById('spot').style.display='none';
   document.getElementById('card').style.display='none';
   document.getElementById('home').style.display='block';
@@ -482,6 +493,50 @@ function quit(){
 }
 
 let pool=[],idx=0,cur=null,answered=false;
+/* 出題中の状態を保存する。
+   画面が消えてトップに戻る事象があり、アプリ内にトップへ戻る経路は
+   「全問終了」と「✕ 中断」しかないため、原因はページの再読込か中断の誤タップ。
+   いずれの場合も pool / idx がメモリ上にしかなく、途中の状態が失われていた。
+   状態を保存し、ホームから続きに戻れるようにする。 */
+const SKEY=KEY+'_session';
+function saveSession(){
+  try{
+    if(!pool||!pool.length||idx>=pool.length){ localStorage.removeItem(SKEY); return; }
+    localStorage.setItem(SKEY,JSON.stringify({ids:pool.map(q=>q.id),idx:idx,at:Date.now()}));
+  }catch(e){}
+}
+function clearSession(){ try{ localStorage.removeItem(SKEY); }catch(e){} }
+function loadSession(){
+  try{
+    const d=JSON.parse(localStorage.getItem(SKEY)||'null');
+    if(!d||!Array.isArray(d.ids)||typeof d.idx!=='number') return null;
+    if(Date.now()-(d.at||0) > 12*3600*1000){ clearSession(); return null; }  // 12時間で失効
+    const byId={}; Q.forEach(q=>byId[q.id]=q);
+    const ids=d.ids.filter(i=>byId[i]);
+    if(!ids.length||d.idx>=ids.length) { clearSession(); return null; }
+    return {pool:ids.map(i=>byId[i]), idx:d.idx};
+  }catch(e){ return null; }
+}
+function resume(){
+  const r=loadSession(); if(!r) return;
+  pool=r.pool; idx=r.idx;
+  document.getElementById('home').style.display='none';
+  document.getElementById('card').style.display='flex';
+  load();
+}
+
+/* 読み込みの記録。再読込か通常の遷移かを後から判別できるようにする。
+   直近10件だけ残す（原因の切り分け用） */
+(function(){
+  try{
+    const nav=(performance.getEntriesByType('navigation')[0]||{}).type||'unknown';
+    const k=KEY+'_boot';
+    const a=JSON.parse(localStorage.getItem(k)||'[]');
+    a.push({t:new Date().toISOString(),nav:nav,mid:!!localStorage.getItem(SKEY)});
+    localStorage.setItem(k,JSON.stringify(a.slice(-10)));
+  }catch(e){}
+})();
+
 function shuffle(a){for(let i=a.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[a[i],a[j]]=[a[j],a[i]];}return a;}
 
 function start(mode){
@@ -497,7 +552,7 @@ function start(mode){
   }
   if(!pool.length){alert('対象の問題がありません');return;}
   idx=0;document.getElementById('home').style.display='none';
-  document.getElementById('card').style.display='flex';load();
+  document.getElementById('card').style.display='flex';load();saveSession();
 }
 
 /* 出題のたびに〇と×をランダムに切り替える。
@@ -656,12 +711,27 @@ function rate(b){ if(!answered)return; apply(b,true); showRec(); }
 
 function next(){
   idx++;
+  saveSession();
   if(idx>=pool.length){
+    clearSession();
     document.getElementById('card').style.display='none';
     document.getElementById('home').style.display='block';
     renderHome();return;
   }
   load();
+}
+/* 読み込み履歴を表示する。画面が消えてトップに戻る事象の原因切り分け用。
+   nav=reload なら再読込、navigate なら通常の遷移（＝中断ボタン等）。
+   mid=true は「出題の途中だった」ことを示す。 */
+function showBoot(){
+  const el=document.getElementById('bootlog');
+  if(el.style.display==='block'){ el.style.display='none'; return; }
+  let a=[];
+  try{ a=JSON.parse(localStorage.getItem(KEY+'_boot')||'[]'); }catch(e){}
+  el.textContent = a.length
+    ? a.map(x=>`${x.t.slice(5,19).replace('T',' ')}  ${x.nav}${x.mid?'  ← 出題の途中で読み込まれた':''}`).join('\n')
+    : '記録なし';
+  el.style.display='block';
 }
 function resetAll(){
   if(!confirm('この端末の学習記録をすべて消します。よろしいですか？'))return;
