@@ -19,7 +19,7 @@ header .sub{font-size:11px;color:var(--sub);margin-bottom:10px}
 .row{display:flex;align-items:center;gap:8px;margin:6px 0;font-size:13px}
 .row .lbl{width:74px;color:var(--sub);flex-shrink:0}
 .row .barwrap{flex:1;background:#0b1220;border-radius:6px;height:18px;overflow:hidden;position:relative}
-.row .bar{height:100%;border-radius:6px}
+.row .bar{display:block;height:100%;border-radius:6px;min-width:2px}   /* span はインラインなので display 指定が要る。無いと幅が効かず棒が出ない */
 .row .num{position:absolute;right:6px;top:0;line-height:18px;font-size:11px;font-weight:700}
 .pct{float:right;font-size:12px;color:var(--acc);font-weight:700}
 .goal{font-size:26px;font-weight:800;color:var(--acc)}
@@ -244,7 +244,7 @@ const Q = [{"t": "ox", "ch": 1, "law": "社会保障・統計", "cat": "社会�
 /* 版スタンプ。VER は「この行を伏せたファイル内容」の sha256 先頭8桁で、
    npm test（scripts/version-stamp.mjs）が一致を強制する。
    内容を変えれば必ず変わるので、画面の値を見れば新旧を判別できる。 */
-const VER='8e19e881';
+const VER='8884ee1d';
 const KEY='dd_shaichi_ch12_v1';
 const LV=['未学習','要復習','不安あり','覚えた','完璧'];
 const LVC=['#64748b','#ef4444','#eab308','#22c55e','#3b82f6'];
