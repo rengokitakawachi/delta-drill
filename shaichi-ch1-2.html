@@ -30,6 +30,8 @@ header .sub{font-size:11px;color:var(--sub);margin-bottom:10px}
 .mbtn{background:var(--card2);border:1px solid var(--line);color:var(--txt);border-radius:12px;
 padding:13px 14px;text-align:left;font-size:14px;font-weight:700;cursor:pointer}
 .mbtn small{display:block;font-weight:400;font-size:11px;color:var(--sub);margin-top:3px}
+.mbtn small .mb{display:block;height:4px;border-radius:3px;background:#0b1220;margin-top:5px;overflow:hidden}
+.mbtn small .mb i{display:block;height:100%;border-radius:3px;background:linear-gradient(90deg,#22c55e,#3b82f6);min-width:2px}
 .mbtn:disabled{opacity:.35}
 .mbtn.primary{background:linear-gradient(135deg,#0ea5e9,#2563eb);border:none}
 .card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:16px;display:none;flex-direction:column}
@@ -147,7 +149,7 @@ border-radius:9px;padding:10px;font-size:12px;font-weight:700;cursor:pointer}
       <button class="mbtn" onclick="start('ch3')">3章 高齢者医療確保法（p.63〜98）
         <small id="c3n"></small></button>
       <button class="mbtn" onclick="start('all')">全問を通しで
-        <small>定着度に関係なく全225問</small></button>
+        <small id="allN">定着度に関係なく全問</small></button>
     </div>
   </div>
   <div class="panel obs">
@@ -244,7 +246,7 @@ const Q = [{"t": "ox", "ch": 1, "law": "社会保障・統計", "cat": "社会�
 /* 版スタンプ。VER は「この行を伏せたファイル内容」の sha256 先頭8桁で、
    npm test（scripts/version-stamp.mjs）が一致を強制する。
    内容を変えれば必ず変わるので、画面の値を見れば新旧を判別できる。 */
-const VER='dbe337e3';
+const VER='94d3d453';
 const KEY='dd_shaichi_ch12_v1';
 const LV=['未学習','要復習','不安あり','覚えた','完璧'];
 const LVC=['#64748b','#ef4444','#eab308','#22c55e','#3b82f6'];
@@ -354,9 +356,15 @@ function renderHome(){
   const dn=dueList().length;
   document.getElementById('dueN').textContent=dn;
   document.getElementById('btnRev').disabled = dn===0;
-  document.getElementById('c1n').textContent=`${Q.filter(q=>q.ch===1).length}問`;
-  document.getElementById('c2n').textContent=`${Q.filter(q=>q.ch===2).length}問`;
-  document.getElementById('c3n').textContent=`${Q.filter(q=>q.ch===3).length}問`;
+  for(const ch of [1,2,3]){
+    const qs=Q.filter(q=>q.ch===ch);
+    const p=qs.reduce((a,q)=>a+W[box(q.id)],0)/qs.length*100;
+    const un=qs.filter(q=>box(q.id)===0).length;
+    document.getElementById('c'+ch+'n').innerHTML=
+      `${qs.length}問　定着 <b>${p.toFixed(1)}%</b>${un?`　未学習 ${un}問`:'　未学習なし'}`
+      +`<span class="mb"><i style="width:${p.toFixed(1)}%"></i></span>`;
+  }
+  document.getElementById('allN').innerHTML=`定着度に関係なく全${Q.length}問`;
   const rs=loadSession(), rb=document.getElementById('btnResume');
   if(rb){
     rb.style.display = rs ? 'block' : 'none';
