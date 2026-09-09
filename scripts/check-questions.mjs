@@ -11,6 +11,15 @@ const FILE = 'shaichi-ch1-2.html';
 const html = fs.readFileSync(FILE, 'utf8');
 const Q = JSON.parse(html.match(/const Q = (\[[\s\S]*?\]);\n/)[1]);
 
+// 誤り箇所タップは本体の spotChunks が節に切れたときだけ出る。
+// 切れないと機能が黙って消えるので、本体からそのまま取り出して全問で確かめる。
+// eslint-disable-next-line no-eval
+const spotChunks = eval(`(${html.match(/function spotChunks\(text,w\)\{[\s\S]*?\n\}/)[0].replace('function spotChunks', 'function')})`);
+
+// 国の機関には所在地がない。「主たる事務所の所在地の厚生労働大臣」のように、
+// 場所の修飾が付いたまま国の機関に差し替えると日本語として成り立たなくなる。
+const PLACE_ORGAN = /(所在地|区域内|管轄|所轄)の(厚生労働大臣|国|内閣総理大臣)/;
+
 // 法令上、実際に繰り返す表記。これらは誤りではない
 const ALLOW = [
   '国民健康保険保険給付費等交付金',
@@ -107,6 +116,16 @@ for (const q of Q) {
       if (opts.length < 2) errs.push(`${q.id} の選択肢が1つしかない`);
       if (new Set(opts).size !== opts.length) errs.push(`${q.id} の選択肢に重複がある`);
     }
+  }
+}
+
+for (const q of Q) {
+  for (const f of ['q', 'qx', 'text']) {
+    const m = (q[f] || '').match(PLACE_ORGAN);
+    if (m) errs.push(`${q.id} の ${f} に「${m[0]}」（国の機関に所在地の修飾が付いている）`);
+  }
+  if (q.t === 'ox' && q.qx && q.w && !spotChunks(q.qx, q.w)) {
+    errs.push(`${q.id} は誤り箇所タップが出ない（spotChunks が節に切れない）`);
   }
 }
 
