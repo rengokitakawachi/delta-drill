@@ -119,7 +119,17 @@ for (const q of Q) {
   }
 }
 
+// 受動態で義務や権限を問うのに、誰からの求めかが書かれていないと答えようがない。
+// o150 は法27条4項の「❶から❸の規定により」という限定を落としていて、
+// 保険者からの求めなのか誰からでもよいのかが読み取れなかった。
+const PASSIVE = /(求められた|委託を受けた|通知を受けた|申請を受けた|請求を受けた)/;
+
 for (const q of Q) {
+  const body = q.q || q.text || '';
+  const pm = body.match(PASSIVE);
+  if (pm && !/から|より/.test(body.slice(0, pm.index))) {
+    errs.push(`${q.id} は「${pm[1]}」の行為者が書かれていない（誰からの求めかで結論が変わる）`);
+  }
   for (const f of ['q', 'qx', 'text']) {
     const m = (q[f] || '').match(PLACE_ORGAN);
     if (m) errs.push(`${q.id} の ${f} に「${m[0]}」（国の機関に所在地の修飾が付いている）`);
