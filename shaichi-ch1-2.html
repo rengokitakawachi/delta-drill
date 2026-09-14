@@ -179,6 +179,7 @@ border-radius:9px;padding:10px;font-size:12px;font-weight:700;cursor:pointer}
     <div style="display:flex;gap:7px">
       <input id="sc" placeholder="同期コード（任意の文字列）" autocapitalize="off" autocorrect="off" spellcheck="false">
       <button class="mini" style="background:var(--maru);color:#fff;border:none" onclick="saveSync()">接続</button>
+      <button class="mini" onclick="syncLink()">リンク</button>
     </div>
     <div class="st" id="syncst">オフ</div>
   </div>
@@ -246,7 +247,7 @@ const Q = [{"t": "ox", "ch": 1, "law": "社会保障・統計", "cat": "社会�
 /* 版スタンプ。VER は「この行を伏せたファイル内容」の sha256 先頭8桁で、
    npm test（scripts/version-stamp.mjs）が一致を強制する。
    内容を変えれば必ず変わるので、画面の値を見れば新旧を判別できる。 */
-const VER='4d862291';
+const VER='40042870';
 const KEY='dd_shaichi_ch12_v1';
 const LV=['未学習','要復習','不安あり','覚えた','完璧'];
 const LVC=['#64748b','#ef4444','#eab308','#22c55e','#3b82f6'];
@@ -395,6 +396,40 @@ let firstSnap=false, remoteN=0, allowEmptyPush=false, remoteDiag=null;
 let lastPushed='', snapN=0;      // lastPushed: 直前に送った内容 / snapN: スナップショット受信数
 function nP(o){ return o?Object.keys(o).length:0; }
 function syncCode(){try{return localStorage.getItem('sync_code')||'';}catch(e){return '';}}
+/* 同期コードを URL からも受け取る。
+   iOS の ITP は、しばらく開かないサイトの localStorage を消す。別のURL（GitHub Pages と
+   Vercel など）で開いた場合も保存領域は別になる。どちらの場合もコードだけが消えて
+   「立ち上げたら忘れている」ように見える。ホーム画面のショートカットに ?sync=... を
+   含めておけば、消えていても起動時にそこから復元できる。 */
+function adoptCodeFromURL(){
+  const m=(location.search+location.hash).match(/[?&#]sync=([A-Za-z0-9_.:-]{1,64})/);
+  if(!m) return;
+  const c=decodeURIComponent(m[1]);
+  const cur=syncCode();
+  if(!c||c===cur) return;
+  /* 手元に別のコードが入っているときは黙って上書きしない。
+     古いショートカットを開いただけで、あとから変えたコードが巻き戻ってしまう。 */
+  if(cur && !confirm('同期コードを、リンクに含まれているものに切り替えますか？\n\n今: '+cur+'\n新: '+c)) return;
+  try{localStorage.setItem('sync_code',c);}catch(e){}
+  lg('code_from_url',{len:c.length});
+}
+function syncLink(){
+  const c=syncCode();
+  if(!c){ alert('先に同期コードを入れて「接続」してください。'); return; }
+  const u=location.origin+location.pathname+'?sync='+encodeURIComponent(c);
+  const msg='このリンクをホーム画面に追加しておくと、記録が消えてもコードが復元されます。\n\n'+u;
+  if(navigator.clipboard&&navigator.clipboard.writeText){
+    navigator.clipboard.writeText(u).then(()=>alert('リンクをコピーしました。\n'+msg),()=>prompt(msg,u));
+  }else prompt(msg,u);
+}
+/* 保存できない端末の警告と、同期コード未設定の警告を同じ枠で出す。
+   前者のほうが重いので、後者で上書きしない。 */
+let storageBad=false;
+function setWarn(html){
+  const w=document.getElementById('warn'); if(!w||storageBad) return;
+  if(html){ w.style.display='block'; w.innerHTML=html; }
+  else { w.style.display='none'; w.innerHTML=''; }
+}
 function setSt(t,c){const el=document.getElementById('syncst'); if(el){el.textContent=t; el.className='st '+(c||'');}}
 function saveSync(){
   const c=document.getElementById('sc').value.trim();
@@ -414,7 +449,13 @@ function connectSync(){
   firstSnap=false; remoteN=0; lastPushed=''; snapN=0;
   if(!fbReady) return;
   const code=syncCode();
-  if(!code){ syncDoc=null; setSt('オフ（同期コード未設定）',''); return; }
+  if(!code){
+    syncDoc=null; setSt('オフ（同期コード未設定）','');
+    setWarn('⚠️ <b>同期コードが入っていません</b>。このまま解いても記録はこの端末だけに残り、'
+      +'自動記録にも上がりません。下の「Firebase 同期」にコードを入れて<b>接続</b>してください。');
+    return;
+  }
+  setWarn('');
   setSt('接続中…','');
   try{
     syncDoc=firebase.firestore().collection('sync').doc(code);
@@ -882,12 +923,14 @@ function resetAll(){
   let ok=true;
   try{ localStorage.setItem('__t','1'); localStorage.removeItem('__t'); }catch(e){ ok=false; }
   if(!ok){
+    storageBad=true;
     const w=document.getElementById('warn');
     w.style.display='block';
     w.innerHTML='⚠️ <b>このブラウザでは学習記録を保存できません</b>（プライベートブラウズ等）。'
       +'解いた内容は残りません。通常のブラウザで開き直してください。';
   }
 })();
+adoptCodeFromURL();
 renderHome();
 initFB();
 </script>
