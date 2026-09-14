@@ -169,6 +169,7 @@ function syncCardHTML(){
     </div>
     <div style="display:flex;gap:8px;margin-top:8px">
       <button class="spbtn" style="margin-top:0;flex:1" onclick="genCode()">🎲 コード生成</button>
+      <button class="spbtn" style="margin-top:0;flex:1" onclick="syncLink()">🔗 リンク</button>
       <button class="spbtn" style="margin-top:0;flex:1" onclick="exportData()">📤 バックアップ</button>
       <button class="spbtn" style="margin-top:0;flex:1" onclick="document.getElementById('importfile').click()">📥 復元</button>
     </div>
@@ -230,6 +231,31 @@ function obsCardHTML(){
 const firebaseConfig={apiKey:"AIzaSyAdU1F-JtSC4j-wvqbaUJGTIosW6mOkEck",authDomain:"sharoushi-quiz-73790.firebaseapp.com",projectId:"sharoushi-quiz-73790",storageBucket:"sharoushi-quiz-73790.firebasestorage.app",messagingSenderId:"859893882829",appId:"1:859893882829:web:b2d05225c3c7acf6612e84"};
 let fbReady=false, syncDoc=null, unsub=null, pushTimer=null;
 function syncCode(){ try{return localStorage.getItem('sync_code')||'';}catch(e){return '';} }
+/* 同期コードを URL からも受け取る。
+   iOS の ITP は、しばらく開かないサイトの localStorage を消す。別のURL（GitHub Pages と
+   Vercel など）で開いた場合も保存領域は別になる。どちらの場合もコードだけが消えて
+   「立ち上げたら忘れている」ように見える。ホーム画面のショートカットに ?sync=... を
+   含めておけば、消えていても起動時にそこから復元できる。 */
+function adoptCodeFromURL(){
+  const m=(location.search+location.hash).match(/[?&#]sync=([A-Za-z0-9_.:-]{1,64})/);
+  if(!m) return;
+  const c=decodeURIComponent(m[1]);
+  const cur=syncCode();
+  if(!c||c===cur) return;
+  /* 手元に別のコードが入っているときは黙って上書きしない。
+     古いショートカットを開いただけで、あとから変えたコードが巻き戻ってしまう。 */
+  if(cur && !confirm('同期コードを、リンクに含まれているものに切り替えますか？\n\n今: '+cur+'\n新: '+c)) return;
+  try{localStorage.setItem('sync_code',c);}catch(e){}
+}
+function syncLink(){
+  const c=syncCode();
+  if(!c){ alert('先に同期コードを入れて「接続」してください。'); return; }
+  const u=location.origin+location.pathname+'?sync='+encodeURIComponent(c);
+  const msg='このリンクをホーム画面に追加しておくと、記録が消えてもコードが復元されます。\n\n'+u;
+  if(navigator.clipboard&&navigator.clipboard.writeText){
+    navigator.clipboard.writeText(u).then(()=>alert('リンクをコピーしました。\n'+msg),()=>prompt(msg,u));
+  }else prompt(msg,u);
+}
 function setSyncCode(c){ c=(c||'').trim(); try{localStorage.setItem('sync_code',c);}catch(e){} connectSync(); if(view==='home')renderHome(); }
 function setSyncStatus(t,cls){ const el=document.getElementById('syncstatus'); if(el){ el.textContent=t; el.className='syncstatus '+(cls||''); } }
 function saveAll(){ save(); saveS(); }
@@ -650,6 +676,7 @@ document.getElementById('importfile').addEventListener('change',function(e){
   r.onload=function(){ try{ applyImport(JSON.parse(r.result)); }catch(err){ alert('読み込みに失敗しました（ファイル形式が不正です）。'); } e.target.value=''; };
   r.readAsText(f);
 });
+adoptCodeFromURL();
 goHome();
 initFirebase();
 </script>
