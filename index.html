@@ -1,6 +1,18 @@
 <!DOCTYPE html>
 <html lang="ja">
 <head>
+<script>
+/* 配信を Vercel へ一本化した（2026-09-14 User 決定）。
+   GitHub Pages で開かれたら Vercel へ転送する。オリジンが変わると
+   localStorage は引き継げないので、同期コードだけ URL に載せて渡す。
+   ここを <head> に置いているのは、描画前に飛ばすため。 */
+(function(){
+  if(!/\.github\.io$/i.test(location.hostname)) return;
+  var p=location.pathname.replace(/^\/delta-drill/,'')||'/';
+  var c=''; try{ c=localStorage.getItem('sync_code')||''; }catch(e){}
+  location.replace('https://delta-drill.vercel.app'+p+(c?'?sync='+encodeURIComponent(c):''));
+})();
+</script>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Delta Drill｜社労士○×問題集</title>
