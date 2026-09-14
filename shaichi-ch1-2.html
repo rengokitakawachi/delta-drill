@@ -137,11 +137,13 @@ border-radius:9px;padding:10px;font-size:12px;font-weight:700;cursor:pointer}
     <h2>出題</h2>
     <div class="btnrow">
       <button class="mbtn primary" onclick="start('auto')">おまかせ出題
-        <small>復習期限が来たものを優先し、足りない分を未学習から出します</small></button>
+        <small>直近10回の成否・定着度・復習期限で重みづけして出します</small></button>
       <button class="mbtn resume" id="btnResume" onclick="resume()" style="display:none">▶ 続きから
         <small id="resumeN"></small></button>
       <button class="mbtn" id="btnRev" onclick="start('review')">復習優先出題
         <small><span id="dueN">0</span>問が復習期限に達しています</small></button>
+      <button class="mbtn" id="btnNew" onclick="start('new')">未出題から
+        <small id="newN"></small></button>
       <button class="mbtn" onclick="start('ch1')">1章 社会保険の概要（p.9〜26）
         <small id="c1n"></small></button>
       <button class="mbtn" onclick="start('ch2')">2章 国民健康保険法（p.27〜62）
@@ -247,7 +249,7 @@ const Q = [{"t": "ox", "ch": 1, "law": "社会保障・統計", "cat": "社会�
 /* 版スタンプ。VER は「この行を伏せたファイル内容」の sha256 先頭8桁で、
    npm test（scripts/version-stamp.mjs）が一致を強制する。
    内容を変えれば必ず変わるので、画面の値を見れば新旧を判別できる。 */
-const VER='40042870';
+const VER='51c212c6';
 const KEY='dd_shaichi_ch12_v1';
 const LV=['未学習','要復習','不安あり','覚えた','完璧'];
 const LVC=['#64748b','#ef4444','#eab308','#22c55e','#3b82f6'];
@@ -331,6 +333,30 @@ function refLine(page){
 }
 
 function box(id){return (S.p[id]&&S.p[id].b)||0;}
+/* 各問題の直近10回の成否。'1'=正解 '0'=不正解 を古い順に並べた文字列で持つ。
+   文字列にしているのは Firestore へそのまま載せるため（配列より軽く、マージも単純）。 */
+const HN=10;
+function hist(id){ const h=(S.p[id]&&S.p[id].h)||''; return typeof h==='string'?h:''; }
+function pushHist(id,ok){ return (hist(id)+(ok?'1':'0')).slice(-HN); }
+/* 誤答率。直近ほど重くする（10回中いちばん新しい回が最も効く）。
+   履歴が無ければ null を返し、呼び出し側で「未知」として扱う。 */
+function wrongRate(id){
+  const h=hist(id); if(!h) return null;
+  let sum=0, bad=0;
+  for(let i=0;i<h.length;i++){ const w=i+1; sum+=w; if(h[i]==='0') bad+=w; }
+  return sum?bad/sum:0;
+}
+/* おまかせ出題の優先度。大きいほど先に出す。
+   定着が浅い・よく間違える・直近で間違えた・期限が来た、を足し合わせる。 */
+function priority(id){
+  const h=hist(id), r=wrongRate(id);
+  let s=(4-box(id))*10;                       // 定着が浅いほど高い
+  s += (r===null) ? 25 : r*60;                // 履歴なしは中くらい／誤答率は直近重み付き
+  if(h && h[h.length-1]==='0') s += 30;       // 直近で間違えた
+  if(h && h.length<5) s += (5-h.length)*4;    // 試行が少ないうちは誤答率を信用しきらない
+  if(due(id)) s += 20;                        // 復習期限が来た
+  return s;
+}
 function due(id){
   const r=S.p[id]; if(!r) return true;            // 未学習は常に対象
   if(r.b<=1) return true;                          // 要復習は即
@@ -357,6 +383,9 @@ function renderHome(){
   const dn=dueList().length;
   document.getElementById('dueN').textContent=dn;
   document.getElementById('btnRev').disabled = dn===0;
+  const nn=Q.filter(q=>box(q.id)===0).length;
+  document.getElementById('newN').textContent = nn?`まだ解いていない ${nn}問から出します`:'未出題はありません';
+  document.getElementById('btnNew').disabled = nn===0;
   for(const ch of [1,2,3]){
     const qs=Q.filter(q=>q.ch===ch);
     const p=qs.reduce((a,q)=>a+W[box(q.id)],0)/qs.length*100;
@@ -490,7 +519,7 @@ function mergeRemote(d){
   if(d.diag&&Array.isArray(d.diag)) remoteDiag=d.diag;
   if(d.p) for(const id in d.p){
     const r=d.p[id]||{}, l=S.p[id];
-    if(!l || (r.at||'')>(l.at||'')){ S.p[id]={b:r.b||0, at:r.at||''}; ch=true; }
+    if(!l || (r.at||'')>(l.at||'')){ S.p[id]={b:r.b||0, at:r.at||'', h:(typeof r.h==='string'?r.h:'')}; ch=true; }
   }
   if(d.day===today()){
     if((d.n||0)>S.n){ S.n=d.n; ch=true; }
@@ -661,17 +690,23 @@ window.addEventListener('storage',ev=>lg('storage_evt',{k:ev.key,newNull:ev.newV
 
 function shuffle(a){for(let i=a.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[a[i],a[j]]=[a[j],a[i]];}return a;}
 
+/* 優先度の高い順に並べる。同点が固まらないよう小さな揺らぎを足す
+   （揺らぎ幅8は「定着度1段階ぶん（10）」より小さいので、順位の大枠は崩れない）。 */
+function byPriority(list){
+  return list.map(q=>({q:q,s:priority(q.id)+Math.random()*8}))
+             .sort((a,b)=>b.s-a.s).map(x=>x.q);
+}
 function start(mode){
   if(mode==='ch1') pool=shuffle(Q.filter(q=>q.ch===1));
   else if(mode==='ch2') pool=shuffle(Q.filter(q=>q.ch===2));
   else if(mode==='ch3') pool=shuffle(Q.filter(q=>q.ch===3));
   else if(mode==='all') pool=shuffle(Q.slice());
   else if(mode==='review') pool=shuffle(dueList());
-  else {                                   // auto: 期限到来 → 未学習 → 残り
-    const d=shuffle(dueList()), n=shuffle(Q.filter(q=>box(q.id)===0));
-    const rest=shuffle(Q.filter(q=>box(q.id)>0&&!due(q.id)));
-    pool=d.concat(n,rest).slice(0,GOAL);
+  else if(mode==='new'){                   // 未出題優先: 未出題 → 足りない分はおまかせの順
+    const fresh=shuffle(Q.filter(q=>box(q.id)===0));
+    pool=fresh.concat(byPriority(Q.filter(q=>box(q.id)>0))).slice(0,GOAL);
   }
+  else pool=byPriority(Q.slice()).slice(0,GOAL);   // auto: 優先度順
   if(!pool.length){alert('対象の問題がありません');return;}
   idx=0;lg('start',{mode:mode,n:pool.length});
   document.getElementById('home').style.display='none';
@@ -831,7 +866,7 @@ function feedback(ok,correctLabel){
     revealFb();
   }
   // 自動記録する。初回正解=覚えた／以降の正解=1段階上げる／不正解=どこからでも要復習
-  apply(ok ? nextBox(box(cur.id)) : 1, false, sec);
+  apply(ok ? nextBox(box(cur.id)) : 1, false, sec, ok);
   showRec(sec);
   document.getElementById('selfrate').style.display='block';
   document.getElementById('nextBtn').textContent=(idx===pool.length-1)?'ホームへ →':'次の問題 →';
@@ -842,9 +877,11 @@ function ansSel(v){ if(answered)return; feedback(v===cur._ans, cur._ans); }
 /* 正解時の遷移。未学習からの初回正解は「覚えた」まで一気に上げる */
 function nextBox(b){ return b===0 ? 3 : Math.min(b+1,4); }
 
-function apply(b,recount,sec){
+function apply(b,recount,sec,ok){
   if(!recount) lg('ans',{id:cur.id,b:b,p:Object.keys(S.p).length+1,n:S.n+1});
-  S.p[cur.id]={b:b,at:new Date().toISOString()};
+  /* 履歴を積むのは実際に答えたときだけ。あとから定着度を付け直しても回数は増やさない。 */
+  const h = recount ? hist(cur.id) : pushHist(cur.id,ok);
+  S.p[cur.id]={b:b,at:new Date().toISOString(),h:h};
   if(!recount){ S.n++; S.t+=(sec||0); }
   // 当日分を日別ログにも書く。日付を跨いでアプリを開かなくても記録が残る
   S.daily[S.day]=S.n; S.log[S.day]=S.t;
@@ -853,9 +890,14 @@ function apply(b,recount,sec){
 function showRec(sec){
   const b=box(cur.id);
   const left=4-b;
+  const h=hist(cur.id);
+  /* 直近10回を古い→新しいの順に並べる。右端が今回。 */
+  const marks = h ? ' 　' + [...h].map(c=>c==='1'
+      ? '<span style="color:var(--maru)">⚪︎</span>'
+      : '<span style="color:var(--batsu)">✕</span>').join('') : '';
   document.getElementById('rec').innerHTML =
     `記録: <b>${LV[b]}</b>` + (b>=4?'（復習不要）':`（完璧まであと${left}回）`)
-    + (typeof sec==='number' ? `　⏱ <b>${fmt(sec)}</b>` : '');
+    + (typeof sec==='number' ? `　⏱ <b>${fmt(sec)}</b>` : '') + marks;
   for(let i=1;i<=4;i++){
     document.getElementById('rb'+i).className = (i===b?'on':'');
   }
