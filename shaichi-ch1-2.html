@@ -9,8 +9,11 @@
 (function(){
   if(!/\.github\.io$/i.test(location.hostname)) return;
   var p=location.pathname.replace(/^\/delta-drill/,'')||'/';
-  var c=''; try{ c=localStorage.getItem('sync_code')||''; }catch(e){}
-  location.replace('https://delta-drill.vercel.app'+p+(c?'?sync='+encodeURIComponent(c):''));
+  var q=[], g=function(k){ try{ return localStorage.getItem(k)||''; }catch(e){ return ''; } };
+  /* オリジンが変わると localStorage は引き継げないので、設定を URL に載せて渡す */
+  [['sync','sync_code'],['ov','obsidian_vault'],['of','obsidian_folder'],['om','obsidian_mode']]
+    .forEach(function(x){ var v=g(x[1]); if(v) q.push(x[0]+'='+encodeURIComponent(v)); });
+  location.replace('https://delta-drill.vercel.app'+p+(q.length?'?'+q.join('&'):''));
 })();
 </script>
 <meta charset="UTF-8">
@@ -182,6 +185,7 @@ border-radius:9px;padding:10px;font-size:12px;font-weight:700;cursor:pointer}
       <button class="mini" id="obAdv" style="flex:1" onclick="setObsMode('adv')">⚡ 一発ジャンプ</button>
       <button class="mini" id="obSea" style="flex:1" onclick="setObsMode('search')">🔍 検索で開く</button>
     </div>
+    <div class="st" id="obsst" style="margin-top:8px"></div>
   </div>
   <div class="panel bk sync">
     <h2>☁️ 端末間同期（Firebase）</h2>
@@ -261,7 +265,7 @@ const Q = [{"t": "ox", "ch": 1, "law": "社会保障・統計", "cat": "社会�
 /* 版スタンプ。VER は「この行を伏せたファイル内容」の sha256 先頭8桁で、
    npm test（scripts/version-stamp.mjs）が一致を強制する。
    内容を変えれば必ず変わるので、画面の値を見れば新旧を判別できる。 */
-const VER='1c9581aa';
+const VER='e06f6c6f';
 const KEY='dd_shaichi_ch12_v1';
 const LV=['未学習','要復習','不安あり','覚えた','完璧'];
 const LVC=['#64748b','#ef4444','#eab308','#22c55e','#3b82f6'];
@@ -422,6 +426,12 @@ function renderHome(){
   const adv=obsMode()==='adv';
   document.getElementById('obAdv').className='mini'+(adv?' on':'');
   document.getElementById('obSea').className='mini'+(adv?'':' on');
+  /* vault 名が空だとリンクは組み立てられても Obsidian 側で開けない。
+     黙って何も起きないので、ここで気づけるようにする。 */
+  const os=document.getElementById('obsst');
+  if(os) os.innerHTML = obsVault()
+    ? `vault <b>${obsVault()}</b>${obsFolder()?` ／ フォルダ <b>${obsFolder()}</b>`:'　フォルダ未設定'}`
+    : '⚠️ <b>vault名が未設定です。</b>「📖 参照ページ」をタップしても Obsidian は開きません。';
 }
 
 /* ===== Firebase 同期（総合版と同じ sync_code・同じ doc の別フィールドを使う） =====
@@ -442,23 +452,46 @@ function syncCode(){try{return localStorage.getItem('sync_code')||'';}catch(e){r
    Vercel など）で開いた場合も保存領域は別になる。どちらの場合もコードだけが消えて
    「立ち上げたら忘れている」ように見える。ホーム画面のショートカットに ?sync=... を
    含めておけば、消えていても起動時にそこから復元できる。 */
+function urlParam(k){
+  const m=(location.search+location.hash).match(new RegExp('[?&#]'+k+'=([^&#]*)'));
+  return m?decodeURIComponent(m[1]):null;
+}
 function adoptCodeFromURL(){
-  const m=(location.search+location.hash).match(/[?&#]sync=([A-Za-z0-9_.:-]{1,64})/);
-  if(!m) return;
-  const c=decodeURIComponent(m[1]);
-  const cur=syncCode();
-  if(!c||c===cur) return;
-  /* 手元に別のコードが入っているときは黙って上書きしない。
-     古いショートカットを開いただけで、あとから変えたコードが巻き戻ってしまう。 */
-  if(cur && !confirm('同期コードを、リンクに含まれているものに切り替えますか？\n\n今: '+cur+'\n新: '+c)) return;
-  try{localStorage.setItem('sync_code',c);}catch(e){}
-  lg('code_from_url',{len:c.length});
+  /* 同期コード。手元に別のコードが入っているときは黙って上書きしない
+     （古いショートカットを開いただけで、あとから変えたコードが巻き戻ってしまう）。 */
+  const c=urlParam('sync'), cur=syncCode();
+  if(c && c!==cur){
+    if(!cur || confirm('同期コードを、リンクに含まれているものに切り替えますか？\n\n今: '+cur+'\n新: '+c)){
+      try{localStorage.setItem('sync_code',c);}catch(e){}
+      lg('code_from_url',{len:c.length});
+    }
+  }
+  /* Obsidian の設定。オリジンをまたぐと localStorage は引き継げないので URL で渡す。
+     手元に既に入っているときは触らない（設定し直した内容を巻き戻さない）。 */
+  const pairs=[['ov','obsidian_vault'],['of','obsidian_folder'],['om','obsidian_mode']];
+  for(const [p,k] of pairs){
+    const v=urlParam(p);
+    if(v===null||v==='') continue;
+    let has=''; try{ has=localStorage.getItem(k)||''; }catch(e){}
+    if(has) continue;
+    try{ localStorage.setItem(k,v); }catch(e){}
+    lg('obs_from_url',{k:k});
+  }
+}
+/* 引き継ぎたい設定をまとめて URL のクエリにする */
+function settingsQuery(){
+  const q=[];
+  const c=syncCode(); if(c) q.push('sync='+encodeURIComponent(c));
+  const v=obsVault(); if(v) q.push('ov='+encodeURIComponent(v));
+  const f=obsFolder(); if(f) q.push('of='+encodeURIComponent(f));
+  const m=obsMode();  if(m) q.push('om='+encodeURIComponent(m));
+  return q.length?('?'+q.join('&')):'';
 }
 function syncLink(){
   const c=syncCode();
   if(!c){ alert('先に同期コードを入れて「接続」してください。'); return; }
-  const u=location.origin+location.pathname+'?sync='+encodeURIComponent(c);
-  const msg='このリンクをホーム画面に追加しておくと、記録が消えてもコードが復元されます。\n\n'+u;
+  const u=location.origin+location.pathname+settingsQuery();
+  const msg='このリンクをホーム画面に追加しておくと、記録が消えても同期コードと Obsidian の設定が復元されます。\n\n'+u;
   if(navigator.clipboard&&navigator.clipboard.writeText){
     navigator.clipboard.writeText(u).then(()=>alert('リンクをコピーしました。\n'+msg),()=>prompt(msg,u));
   }else prompt(msg,u);
