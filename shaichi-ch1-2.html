@@ -114,6 +114,14 @@ border-radius:9px;padding:9px 10px;font-size:13px}
 .obs .mini{border:1px solid var(--line);background:var(--card2);color:var(--txt);border-radius:9px;
 padding:9px 10px;font-size:12px;cursor:pointer}
 .obs .on{background:rgba(56,189,248,.2);border-color:var(--acc);color:#bae6fd}
+.diag{display:none;margin-top:9px;background:#0b1220;border:1px solid var(--line);border-radius:10px;
+padding:11px;font-size:11.5px;line-height:1.7}
+.diag ol{margin:0;padding-left:1.25em}
+.diag li{margin-bottom:9px}
+.diag a{display:inline-block;margin-top:4px;color:var(--acc);text-decoration:none;
+background:#0f172a;border:1px solid var(--line);border-radius:8px;padding:6px 9px;font-size:12px}
+.diag code{display:block;margin-top:5px;word-break:break-all;color:var(--sub);
+font-family:ui-monospace,monospace;font-size:10.5px;-webkit-user-select:all;user-select:all}
 .warn{background:#3a1717;border:1px solid var(--ng);border-radius:10px;padding:11px;
 font-size:12px;line-height:1.7;margin-bottom:12px;display:none}
 .bk textarea{width:100%;height:70px;background:#0f172a;border:1px solid var(--line);color:var(--txt);
@@ -188,6 +196,8 @@ border-radius:9px;padding:10px;font-size:12px;font-weight:700;cursor:pointer}
       <button class="mini" id="obSea" style="flex:1" onclick="setObsMode('search')">🔍 検索で開く</button>
     </div>
     <div class="st" id="obsst" style="margin-top:8px"></div>
+    <button class="mini" style="width:100%;margin-top:8px" onclick="obsDiag()">🔧 ジャンプできないとき（切り分け）</button>
+    <div class="diag" id="obsdiag"></div>
   </div>
   <div class="panel bk sync">
     <h2>☁️ 端末間同期（Firebase）</h2>
@@ -267,7 +277,7 @@ const Q = [{"t": "ox", "ch": 1, "law": "社会保障・統計", "cat": "社会�
 /* 版スタンプ。VER は「この行を伏せたファイル内容」の sha256 先頭8桁で、
    npm test（scripts/version-stamp.mjs）が一致を強制する。
    内容を変えれば必ず変わるので、画面の値を見れば新旧を判別できる。 */
-const VER='e3fa836a';
+const VER='08f00f81';
 const KEY='dd_shaichi_ch12_v1';
 const LV=['未学習','要復習','不安あり','覚えた','完璧'];
 const LVC=['#64748b','#ef4444','#eab308','#22c55e','#3b82f6'];
@@ -348,6 +358,40 @@ function obsHref(page){
 }
 function refLine(page){
   return '<a class="reflink" href="'+obsHref(page)+'">📖 '+OBS_LABEL+' P.'+page+' ↗</a>';
+}
+/* ジャンプが効かないときの切り分け。
+   「開かない」としか分からないと手の打ちようがないので、
+   ❶Obsidian が開くか ❷ファイルが開くか ❸プラグインが効くか ❹見出しが一致するか
+   を上から順に1つずつ試せるようにする。❶❷は標準機能なのでプラグイン不要。
+   どこまで進めたかで原因が一意に決まる。 */
+function esc(s){return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
+function diagStep(n,label,url,hint){
+  return '<li><b>'+n+'. '+label+'</b><br><a href="'+esc(url)+'">試す ↗</a>'
+    +'<span style="color:var(--sub)"> — '+hint+'</span><code>'+esc(url)+'</code></li>';
+}
+function obsDiag(){
+  const el=document.getElementById('obsdiag');
+  if(el.style.display==='block'){ el.style.display='none'; el.innerHTML=''; return; }
+  const v=obsVault(), vp=v?('vault='+encodeURIComponent(v)+'&'):'';
+  const f=obsFolder(), fp=(f?f+'/':'')+OBS_LABEL;
+  const P=122;
+  let h='';
+  if(!v) h+='<div style="color:#fca5a5;margin-bottom:9px">⚠️ vault名が空です。まず vault名を入れて保存してください。</div>';
+  h+='<div style="margin-bottom:9px">上から順に試して、<b>どこで止まったか</b>を見てください。</div><ol>';
+  h+=diagStep(1,'Obsidian が開くか','obsidian://open?'+(v?'vault='+encodeURIComponent(v):''),
+      '開かない → vault名が違う（Obsidian の左下＝vault切替に出る名前と大小文字まで一致させる）');
+  h+=diagStep(2,'テキストのファイルが開くか','obsidian://open?'+vp+'file='+encodeURIComponent(fp),
+      '開かない → フォルダ名かファイル名が違う（vault 内の実際の位置に合わせる）');
+  h+=diagStep(3,'Advanced URI が効くか','obsidian://advanced-uri?'+vp+'filepath='+encodeURIComponent(fp),
+      '2 は開くのにこれが開かない → プラグイン未導入／無効（セーフモードも確認）');
+  h+=diagStep(4,'拡張子付きなら効くか','obsidian://advanced-uri?'+vp+'filepath='+encodeURIComponent(fp+'.md'),
+      '3 がだめでこれが開く → リンクの組み立て側の問題。この結果を伝えてください');
+  h+=diagStep(5,'見出しまで飛ぶか',obsHref(P),
+      '3 か 4 は開くのにページ位置に飛ばない → 見出しが一致していない（検索モードに切り替える）');
+  h+=diagStep(6,'検索で開く（プラグイン不要）','obsidian://search?'+vp+'query='+encodeURIComponent('"'+OBS_LABEL+' p.'+P+'"'),
+      'これが動くなら「🔍 検索で開く」モードで運用できる');
+  h+='</ol><div style="color:var(--sub)">※ 5・6 は p.'+P+'（介護保険法）で試します。</div>';
+  el.innerHTML=h; el.style.display='block';
 }
 
 function box(id){return (S.p[id]&&S.p[id].b)||0;}
