@@ -119,6 +119,52 @@ for (const q of Q) {
   }
 }
 
+// 空欄の答えが、問題文の残りから分かってしまう穴埋めを止める。
+// 穴埋めを空欄形式（自分で思い出して自己申告）にしたことで露呈した。
+// s272 は「毎年2月、4月、6月、8月、10月及び12月の【6期】」で、列挙された月を数えれば答えが出る。
+// 6期は覚える対象ではなく、列挙から導ける派生情報にすぎなかった（問うべきは「前月までの分」や支払期月そのもの）。
+// 同じ型で、s235「【65】歳以上…40歳以上65歳未満」、s236「【市町村】に置く…市町村長が任命」、
+// s237「申請のあった日から…【申請のあった日】にさかのぼる」、s021「【都道府県】は、当該都道府県内の…」も漏れていた。
+// 複数空欄の問題は出題時に1つだけ抜き、残りは正解で埋めるので、埋めた後の文で判定する。
+function senLeaks(text) {
+  const out = [];
+  const gs = [...text.matchAll(/【(.+?)】/g)];
+  gs.forEach((g, i) => {
+    const ans = g[1].split('|')[0];
+    let k = 0;
+    const rest = text.replace(/【(.+?)】/g, (mm, x) => (k++ === i ? '□' : x.split('|')[0]));
+    const after = rest.slice(rest.indexOf('□') + 1);
+    const restNo = rest.replace('□', '');
+    if (/^\d+$/.test(ans)) {
+      // 数字だけの答えは、直後の単位とあわせて文中に再登場したら漏れ（「65歳以上」と「65歳未満」）
+      const unit = (after.match(/^[^\d、。（(]/) || [''])[0];
+      if (unit && restNo.includes(ans + unit)) out.push(`答え「${ans}${unit}」が文中にもある`);
+    } else if (ans.length >= 2) {
+      // 主体名などは部分一致でも漏れる（「市町村」と「市町村長」、「都道府県」と「当該都道府県内」）
+      if (restNo.includes(ans)) out.push(`答え「${ans}」が文中にもある`);
+    }
+    // 「N期／N回」は、列挙された項目を数えれば答えが出る
+    const cm = ans.match(/^(\d+)(期|回)$/);
+    if (cm) {
+      for (const m of restNo.matchAll(/(?:[^、。]{1,8}、)+[^、。]{1,8}?及び[^、。の]{1,8}/g)) {
+        // 「児童手当は、毎年2月、4月…及び12月」の先頭の「児童手当は」のような別物を数えないよう、
+        // 末尾の項目と同じ字で終わる項目だけを、後ろから数える
+        const items = m[0].split(/、|及び/);
+        const tail = items[items.length - 1].slice(-1);
+        let n = 0;
+        for (let j = items.length - 1; j >= 0 && items[j].endsWith(tail); j -= 1) n += 1;
+        if (n === Number(cm[1])) out.push(`「${ans}」は列挙（${m[0]}）を数えれば分かる`);
+      }
+    }
+  });
+  return out;
+}
+
+for (const q of Q) {
+  if (q.t !== 'sen') continue;
+  for (const msg of senLeaks(q.text)) errs.push(`${q.id} の空欄の答えが文中から分かる: ${msg}`);
+}
+
 // 受動態で義務や権限を問うのに、誰からの求めかが書かれていないと答えようがない。
 // o150 は法27条4項の「❶から❸の規定により」という限定を落としていて、
 // 保険者からの求めなのか誰からでもよいのかが読み取れなかった。
