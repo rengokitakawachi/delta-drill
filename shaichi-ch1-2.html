@@ -338,7 +338,7 @@ const Q = [{"t": "ox", "ch": 1, "law": "社会保障・統計", "cat": "社会�
 /* 版スタンプ。VER は「この行を伏せたファイル内容」の sha256 先頭8桁で、
    npm test（scripts/version-stamp.mjs）が一致を強制する。
    内容を変えれば必ず変わるので、画面の値を見れば新旧を判別できる。 */
-const VER='0a4ea445';
+const VER='43a863fa';
 const KEY='dd_shaichi_ch12_v1';
 const LV=['未学習','要復習','不安あり','覚えた','完璧'];
 const LVC=['#64748b','#ef4444','#eab308','#22c55e','#3b82f6'];
@@ -770,7 +770,7 @@ function quit(){
   renderHome();
 }
 
-let pool=[],idx=0,cur=null,answered=false,flipMap={};
+let pool=[],idx=0,cur=null,answered=false;
 /* 出題中の状態を保存する。
    画面が消えてトップに戻る事象があり、アプリ内にトップへ戻る経路は
    「全問終了」と「✕ 中断」しかないため、原因はページの再読込か中断の誤タップ。
@@ -804,7 +804,7 @@ function saveSession(){
     if(!pool||!pool.length||idx>=pool.length){ localStorage.removeItem(SKEY); return; }
     /* done は「idx の問題に回答済みか」。
        回答後に中断して再開したとき、同じ問題をもう一度出さないために持つ。 */
-    localStorage.setItem(SKEY,JSON.stringify({ids:pool.map(q=>q.id),idx:idx,done:!!answered,at:Date.now(),fl:flipMap}));
+    localStorage.setItem(SKEY,JSON.stringify({ids:pool.map(q=>q.id),idx:idx,done:!!answered,at:Date.now()}));
   }catch(e){}
 }
 function clearSession(){ try{ localStorage.removeItem(SKEY); }catch(e){} }
@@ -818,12 +818,12 @@ function loadSession(){
     // 回答済みの問題で中断していたら、その次から再開する
     const at = d.done ? d.idx+1 : d.idx;
     if(!ids.length||at>=ids.length) { clearSession(); return null; }   // 最後の問題を解き終えていた
-    return {pool:ids.map(i=>byId[i]), idx:at, fl:(d.fl&&typeof d.fl==='object')?d.fl:{}};
+    return {pool:ids.map(i=>byId[i]), idx:at};
   }catch(e){ return null; }
 }
 function resume(){
   const r=loadSession(); if(!r) return;
-  pool=r.pool; idx=r.idx; flipMap=r.fl;
+  pool=r.pool; idx=r.idx;
   document.getElementById('home').style.display='none';
   document.getElementById('card').style.display='flex';
   load();
@@ -875,7 +875,6 @@ function start(mode){
   }
   else pool=byPriority(A.slice()).slice(0,GOAL);   // auto: 優先度順
   if(!pool.length){alert('対象の問題がありません');return;}
-  flipMap=makeFlipMap(pool);
   idx=0;lg('start',{mode:mode,n:pool.length});
   document.getElementById('home').style.display='none';
   document.getElementById('card').style.display='flex';load();saveSession();
@@ -884,26 +883,11 @@ function start(mode){
 /* 出題のたびに〇と×をランダムに切り替える。
    qx（誤り版）を持つ問題は、コインで q（正解版）と qx のどちらを出すか決める。
    同じ文が日によって〇にも×にもなるので、文を覚えても効かない。 */
-/* 1問ごとのコインだけだと、全体では半々でも1セッション（○×は15問前後）の中で
-   「15問中10問が○」程度の偏りが普通に起きる（2026-10 User 指摘「○が正解の率が高すぎる」）。
-   そこでセッションの開始時に、○×問題の半数を○の文、残りを×の文に割り振ってから順番をばらす。
-   奇数のときの1問だけはコインで決める。割り振りは中断・再開しても変わらないようセッションに保存する。 */
-function makeFlipMap(list){
-  const ids=list.filter(q=>q.t==='ox'&&q.qx).map(q=>q.id);
-  const n=ids.length, half=Math.floor(n/2);
-  const marks=[];
-  for(let i=0;i<half;i++){ marks.push(true); marks.push(false); }
-  if(n%2) marks.push(Math.random()<0.5);
-  const sh=shuffle(marks), m={};
-  ids.forEach((id,i)=>{ m[id]=sh[i]; });
-  return m;
-}
 function draw(q){
   if(q.t!=='ox') return {text:q.q, ans:q.a, flipped:false};
   if(!q.qx) return {text:q.q, ans:q.a, flipped:false};   // 誤り版が無い問題は据え置き
-  const maru = (q.id in flipMap) ? flipMap[q.id] : Math.random()<0.5;
-  return maru ? {text:q.q, ans:true, flipped:false}
-              : {text:q.qx, ans:false, flipped:true};
+  return Math.random()<0.5 ? {text:q.q, ans:true, flipped:false}
+                           : {text:q.qx, ans:false, flipped:true};
 }
 function load(){
   cur=pool[idx];answered=false;

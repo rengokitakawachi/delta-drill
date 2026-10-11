@@ -1,6 +1,7 @@
 # CLAUDE.md — delta-drill
 
-社労士学習クイズ（GitHub Pages 配信）。**index.html はビルド生成物**で、正本は `build/`。
+社労士学習クイズ。**正式な学習アプリ（delta drill）は `shaichi-ch1-2.html`**（直接編集可・2026-10-11 User 決定）で、トップ URL `/` はここへ転送する。
+総合版の **index.html はビルド生成物**（正本は `build/`）で、**利用終了**（残しているが更新しない）。
 配信URL: https://rengokitakawachi.github.io/delta-drill/ ／ 学習実績は Firebase 経由で ai-work-os の delta と連携（本リポは Firebase 設定を変えない）。
 
 ## トークン節約規約（全AIエージェント共通・モデル非依存）
