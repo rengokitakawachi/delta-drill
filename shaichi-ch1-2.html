@@ -134,7 +134,7 @@ font-size:12px;line-height:1.7;margin-bottom:12px;display:none}
 .bk textarea{width:100%;height:70px;background:#0f172a;border:1px solid var(--line);color:var(--txt);
 border-radius:9px;padding:9px;font-size:11px;font-family:ui-monospace,monospace;resize:vertical}
 .bk .btns2{display:flex;gap:7px;margin-top:7px}
-/* ---- 画面ごとの最適化（2026-10: iPhone 16e と iPad Pro を想定） ---- */
+/* ---- 画面ごとの最適化（2026-10: iPhone 16e〈390px〉と iPad Pro 10.5インチ〈縦 834px・横 1112px〉を想定） ---- */
 /* ノッチ・ホームバーに重ならないように */
 .wrap{padding-left:max(16px,env(safe-area-inset-left));padding-right:max(16px,env(safe-area-inset-right));
 padding-bottom:max(16px,env(safe-area-inset-bottom));padding-top:max(16px,env(safe-area-inset-top))}
@@ -164,8 +164,8 @@ padding-bottom:max(16px,env(safe-area-inset-bottom));padding-top:max(16px,env(sa
   .senmode button,.obs .mini{font-size:14px;padding:11px 12px}
   .reflink{font-size:14px}
 }
-/* iPad 横向き：ホームの出題ボタンを2列に並べ、縦に長くなりすぎないようにする */
-@media (min-width:1180px){
+/* iPad 横向き（10.5インチの横＝1112px も含む）：ホームの出題ボタンを2列に並べ、縦に長くなりすぎないようにする */
+@media (min-width:1024px) and (orientation:landscape){
   .wrap{max-width:1040px}
   #home .btnrow{display:grid;grid-template-columns:1fr 1fr;gap:10px}
   #home .btnrow .primary,#home .btnrow .resume{grid-column:1/-1}
@@ -339,7 +339,7 @@ const Q = [{"t": "ox", "ch": 1, "law": "社会保障・統計", "cat": "社会�
 /* 版スタンプ。VER は「この行を伏せたファイル内容」の sha256 先頭8桁で、
    npm test（scripts/version-stamp.mjs）が一致を強制する。
    内容を変えれば必ず変わるので、画面の値を見れば新旧を判別できる。 */
-const VER='deb9425a';
+const VER='17cb5b70';
 const KEY='dd_shaichi_ch12_v1';
 const LV=['未学習','要復習','不安あり','覚えた','完璧'];
 const LVC=['#64748b','#ef4444','#eab308','#22c55e','#3b82f6'];
