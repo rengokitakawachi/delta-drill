@@ -7,7 +7,8 @@
 
 - このリポジトリの root を GitHub Pages で配信する（`.nojekyll` 同梱）。
 - 公開URL（例）: `https://rengokitakawachi.github.io/delta-drill/`
-- 学習画面の本体は `index.html`。
+- **正式な学習アプリ（delta drill）は `shaichi-ch1-2.html`**（2026-10-11 User 決定）。トップ URL `/` はここへ転送する（`vercel.json` の redirects）。
+- `index.html`（総合版・1803問）は**利用終了**。ファイルとビルドは残しているが、今後は更新しない。
 
 ### Pages 有効化手順
 1. GitHub → このリポ → **Settings → Pages**
