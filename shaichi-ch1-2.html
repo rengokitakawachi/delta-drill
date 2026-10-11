@@ -17,7 +17,7 @@
 })();
 </script>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
 <title>delta drill</title>
 <style>
 *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
@@ -133,6 +133,43 @@ font-size:12px;line-height:1.7;margin-bottom:12px;display:none}
 .bk textarea{width:100%;height:70px;background:#0f172a;border:1px solid var(--line);color:var(--txt);
 border-radius:9px;padding:9px;font-size:11px;font-family:ui-monospace,monospace;resize:vertical}
 .bk .btns2{display:flex;gap:7px;margin-top:7px}
+/* ---- 画面ごとの最適化（2026-10: iPhone 16e と iPad Pro を想定） ---- */
+/* ノッチ・ホームバーに重ならないように */
+.wrap{padding-left:max(16px,env(safe-area-inset-left));padding-right:max(16px,env(safe-area-inset-right));
+padding-bottom:max(16px,env(safe-area-inset-bottom));padding-top:max(16px,env(safe-area-inset-top))}
+/* 問題カード上部：残り時間が「中断」ボタンの外へはみ出していたので、横並びの行にまとめる */
+.meta{align-items:center;gap:8px}
+.meta .metar{display:flex;align-items:center;gap:10px;flex-shrink:0}
+.meta .qtime{float:none}
+.btns button,.chbtns button,.mbtn,.next{min-height:44px}
+/* iPad（縦 1024px 前後・横 1366px 前後）：幅を広げ、文字とボタンを大きくする */
+@media (min-width:744px){
+  .wrap{max-width:820px;padding-left:max(28px,env(safe-area-inset-left));padding-right:max(28px,env(safe-area-inset-right))}
+  header h1{font-size:22px} header .sub{font-size:13px}
+  .panel{padding:20px;border-radius:16px} .panel h2{font-size:15px}
+  .row{font-size:15px} .row .lbl{width:90px} .row .barwrap{height:22px} .row .num{line-height:22px;font-size:13px}
+  .mbtn{font-size:17px;padding:17px 20px} .mbtn small{font-size:13px}
+  .card{padding:28px;border-radius:18px}
+  .meta{font-size:14px} .quit{font-size:13px;padding:6px 12px}
+  .lawbar{font-size:18px;padding:11px 14px}
+  .qtext{font-size:21px;line-height:1.85}
+  .btns button{font-size:26px;padding:22px 0}
+  .chbtns button{font-size:18px;padding:16px} .chbtns .blankans{font-size:19px}
+  .verdict{font-size:21px;padding:12px}
+  .exp{font-size:16.5px;padding:15px} .detail{font-size:15px}
+  .chips button{font-size:17px;padding:11px 14px}
+  .rec{font-size:14.5px} .selfrate button{font-size:13.5px;padding:11px 4px} .selfrate button small{font-size:11px}
+  .next{font-size:18px;padding:17px}
+  .senmode button,.obs .mini{font-size:14px;padding:11px 12px}
+  .reflink{font-size:14px}
+}
+/* iPad 横向き：ホームの出題ボタンを2列に並べ、縦に長くなりすぎないようにする */
+@media (min-width:1180px){
+  .wrap{max-width:1040px}
+  #home .btnrow{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+  #home .btnrow .primary,#home .btnrow .resume{grid-column:1/-1}
+  .card{max-width:900px;margin:0 auto;width:100%}
+}
 .bk .btns2 button{flex:1;border:1px solid var(--line);background:var(--card2);color:var(--txt);
 border-radius:9px;padding:10px;font-size:12px;font-weight:700;cursor:pointer}
 .bk .msg{font-size:11.5px;color:var(--acc);margin-top:7px;min-height:15px}
@@ -264,7 +301,7 @@ border-radius:9px;padding:10px;font-size:12px;font-weight:700;cursor:pointer}
 
 <div class="card" id="card">
   <div class="meta"><span class="tag" id="tag"></span>
-    <span><span id="cnt"></span>　<span class="qtime" id="qtime">0秒</span>　<button class="quit" onclick="quit()">✕ 中断</button></span></div>
+    <span class="metar"><span id="cnt"></span><span class="qtime" id="qtime">0秒</span><button class="quit" onclick="quit()">✕ 中断</button></span></div>
   <div class="lawbar" id="lawbar"></div>
   <div class="qtext" id="qtext"></div>
   <div class="btns" id="oxbtns">
@@ -301,7 +338,7 @@ const Q = [{"t": "ox", "ch": 1, "law": "社会保障・統計", "cat": "社会�
 /* 版スタンプ。VER は「この行を伏せたファイル内容」の sha256 先頭8桁で、
    npm test（scripts/version-stamp.mjs）が一致を強制する。
    内容を変えれば必ず変わるので、画面の値を見れば新旧を判別できる。 */
-const VER='d48bfa70';
+const VER='0a4ea445';
 const KEY='dd_shaichi_ch12_v1';
 const LV=['未学習','要復習','不安あり','覚えた','完璧'];
 const LVC=['#64748b','#ef4444','#eab308','#22c55e','#3b82f6'];
@@ -733,7 +770,7 @@ function quit(){
   renderHome();
 }
 
-let pool=[],idx=0,cur=null,answered=false;
+let pool=[],idx=0,cur=null,answered=false,flipMap={};
 /* 出題中の状態を保存する。
    画面が消えてトップに戻る事象があり、アプリ内にトップへ戻る経路は
    「全問終了」と「✕ 中断」しかないため、原因はページの再読込か中断の誤タップ。
@@ -767,7 +804,7 @@ function saveSession(){
     if(!pool||!pool.length||idx>=pool.length){ localStorage.removeItem(SKEY); return; }
     /* done は「idx の問題に回答済みか」。
        回答後に中断して再開したとき、同じ問題をもう一度出さないために持つ。 */
-    localStorage.setItem(SKEY,JSON.stringify({ids:pool.map(q=>q.id),idx:idx,done:!!answered,at:Date.now()}));
+    localStorage.setItem(SKEY,JSON.stringify({ids:pool.map(q=>q.id),idx:idx,done:!!answered,at:Date.now(),fl:flipMap}));
   }catch(e){}
 }
 function clearSession(){ try{ localStorage.removeItem(SKEY); }catch(e){} }
@@ -781,12 +818,12 @@ function loadSession(){
     // 回答済みの問題で中断していたら、その次から再開する
     const at = d.done ? d.idx+1 : d.idx;
     if(!ids.length||at>=ids.length) { clearSession(); return null; }   // 最後の問題を解き終えていた
-    return {pool:ids.map(i=>byId[i]), idx:at};
+    return {pool:ids.map(i=>byId[i]), idx:at, fl:(d.fl&&typeof d.fl==='object')?d.fl:{}};
   }catch(e){ return null; }
 }
 function resume(){
   const r=loadSession(); if(!r) return;
-  pool=r.pool; idx=r.idx;
+  pool=r.pool; idx=r.idx; flipMap=r.fl;
   document.getElementById('home').style.display='none';
   document.getElementById('card').style.display='flex';
   load();
@@ -838,6 +875,7 @@ function start(mode){
   }
   else pool=byPriority(A.slice()).slice(0,GOAL);   // auto: 優先度順
   if(!pool.length){alert('対象の問題がありません');return;}
+  flipMap=makeFlipMap(pool);
   idx=0;lg('start',{mode:mode,n:pool.length});
   document.getElementById('home').style.display='none';
   document.getElementById('card').style.display='flex';load();saveSession();
@@ -846,11 +884,26 @@ function start(mode){
 /* 出題のたびに〇と×をランダムに切り替える。
    qx（誤り版）を持つ問題は、コインで q（正解版）と qx のどちらを出すか決める。
    同じ文が日によって〇にも×にもなるので、文を覚えても効かない。 */
+/* 1問ごとのコインだけだと、全体では半々でも1セッション（○×は15問前後）の中で
+   「15問中10問が○」程度の偏りが普通に起きる（2026-10 User 指摘「○が正解の率が高すぎる」）。
+   そこでセッションの開始時に、○×問題の半数を○の文、残りを×の文に割り振ってから順番をばらす。
+   奇数のときの1問だけはコインで決める。割り振りは中断・再開しても変わらないようセッションに保存する。 */
+function makeFlipMap(list){
+  const ids=list.filter(q=>q.t==='ox'&&q.qx).map(q=>q.id);
+  const n=ids.length, half=Math.floor(n/2);
+  const marks=[];
+  for(let i=0;i<half;i++){ marks.push(true); marks.push(false); }
+  if(n%2) marks.push(Math.random()<0.5);
+  const sh=shuffle(marks), m={};
+  ids.forEach((id,i)=>{ m[id]=sh[i]; });
+  return m;
+}
 function draw(q){
   if(q.t!=='ox') return {text:q.q, ans:q.a, flipped:false};
   if(!q.qx) return {text:q.q, ans:q.a, flipped:false};   // 誤り版が無い問題は据え置き
-  return Math.random()<0.5 ? {text:q.q, ans:true, flipped:false}
-                           : {text:q.qx, ans:false, flipped:true};
+  const maru = (q.id in flipMap) ? flipMap[q.id] : Math.random()<0.5;
+  return maru ? {text:q.q, ans:true, flipped:false}
+              : {text:q.qx, ans:false, flipped:true};
 }
 function load(){
   cur=pool[idx];answered=false;
@@ -1028,7 +1081,7 @@ function ansSelf(ok){ if(answered)return; feedback(ok, cur._ans); }
 function nextBox(b){ return b===0 ? 3 : Math.min(b+1,4); }
 
 function apply(b,recount,sec,ok){
-  if(!recount) lg('ans',{id:cur.id,b:b,p:Object.keys(S.p).length+1,n:S.n+1});
+  if(!recount) lg('ans',{id:cur.id,b:b,p:Object.keys(S.p).length+1,n:S.n+1,ok:ok?1:0,...(cur.t==='ox'?{s:cur._ans?1:0}:{})});  // s: ○×問題で出した版（1=○の文 0=×の文）
   /* 履歴を積むのは実際に答えたときだけ。あとから定着度を付け直しても回数は増やさない。 */
   const h = recount ? hist(cur.id) : pushHist(cur.id,ok);
   S.p[cur.id]={b:b,at:new Date().toISOString(),h:h};
