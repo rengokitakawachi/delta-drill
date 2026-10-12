@@ -368,7 +368,7 @@ const Q = [{"t": "ox", "ch": 1, "law": "社会保障・統計", "cat": "社会�
 /* 版スタンプ。VER は「この行を伏せたファイル内容」の sha256 先頭8桁で、
    npm test（scripts/version-stamp.mjs）が一致を強制する。
    内容を変えれば必ず変わるので、画面の値を見れば新旧を判別できる。 */
-const VER='c52feba7';
+const VER='337810db';
 const KEY='dd_shaichi_ch12_v1';
 const LV=['未学習','要復習','不安あり','覚えた','完璧'];
 const LVC=['#64748b','#ef4444','#eab308','#22c55e','#3b82f6'];
@@ -1052,7 +1052,9 @@ function scoreLine(q){
   const CL={red:['赤字',3],blue:['青字',2],bold:['太字',1]};
   const parts=[], ex=c.x||[];
   let t=0;
-  if(ex.length){ t+=5*ex.length; parts.push(`過去問${ex.length}回 +${5*ex.length}（${ex.join('・')}）`); }
+  if(ex.length){ t+=5*ex.length;
+    const yr=ex.map(x=>x.replace(/^第(\d+)回 /,(m,n)=>(+n+1968)+'年 '));   // 第49回＝2017年（回＋1968）
+    parts.push(`過去問${ex.length}回 +${5*ex.length}（${yr.join('・')}）`); }
   else parts.push('過去問 0');
   const st=c.s===5?2:c.s===4?1:0; t+=st; parts.push(`★${c.s||0}`+(st?` +${st}`:''));
   if(c.z==='A'){ t+=1; parts.push('Aゾーン +1'); } else if(c.z) parts.push(c.z+'ゾーン');
