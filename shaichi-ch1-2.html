@@ -256,6 +256,10 @@ body.incard header{display:none}
 /* わからないボタン（2026-10-12）。○×より控えめにする */
 .btns .bunk{flex:0.7;background:var(--card2);border:1px solid var(--line);color:var(--sub);font-size:14px;font-weight:700}
 @media (min-width:744px){ .btns .bunk{font-size:18px} }
+/* 正答履歴（日付つき）は記録の下の行に出す */
+.rec .hist{margin-top:3px;font-size:11.5px;color:var(--sub);font-variant-numeric:tabular-nums;line-height:1.6;word-break:break-all}
+.rec .hsep{color:#475569;margin:0 3px}
+@media (min-width:744px){ .rec .hist{font-size:14px} }
 </style>
 <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-auth-compat.js"></script>
@@ -421,7 +425,7 @@ const Q = [{"t": "ox", "ch": 1, "law": "社会保障・統計", "cat": "社会�
 /* 版スタンプ。VER は「この行を伏せたファイル内容」の sha256 先頭8桁で、
    npm test（scripts/version-stamp.mjs）が一致を強制する。
    内容を変えれば必ず変わるので、画面の値を見れば新旧を判別できる。 */
-const VER='3255300b';
+const VER='12c78e38';
 const KEY='dd_shaichi_ch12_v1';
 const LV=['未学習','要復習','不安あり','覚えた','完璧'];
 const LVC=['#64748b','#ef4444','#eab308','#22c55e','#3b82f6'];
@@ -544,6 +548,11 @@ function box(id){return (S.p[id]&&S.p[id].b)||0;}
 const HN=10;
 function hist(id){ const h=(S.p[id]&&S.p[id].h)||''; return typeof h==='string'?h:''; }
 function pushHist(id,ok){ return (hist(id)+(ok?'1':'0')).slice(-HN); }
+/* 各回の答えた日（2026-10-12〜）。'MMDD' を4文字ずつ古い順につなぎ、h の末尾とそろえて持つ。
+   これより前の回には日付が無いので、hd は h より短いことがある（表示では日付なしで出す）。 */
+function histD(id){ const d=(S.p[id]&&S.p[id].hd)||''; return typeof d==='string'?d:''; }
+function mmdd(){ const d=new Date(); return String(d.getMonth()+1).padStart(2,'0')+String(d.getDate()).padStart(2,'0'); }
+function pushHistD(id){ return (histD(id)+mmdd()).slice(-HN*4); }
 /* 誤答率。直近ほど重くする（10回中いちばん新しい回が最も効く）。
    履歴が無ければ null を返し、呼び出し側で「未知」として扱う。 */
 function wrongRate(id){
@@ -775,7 +784,7 @@ function mergeRemote(d){
   if(d.diag&&Array.isArray(d.diag)) remoteDiag=d.diag;
   if(d.p) for(const id in d.p){
     const r=d.p[id]||{}, l=S.p[id];
-    if(!l || (r.at||'')>(l.at||'')){ S.p[id]={b:r.b||0, at:r.at||'', h:(typeof r.h==='string'?r.h:'')}; ch=true; }
+    if(!l || (r.at||'')>(l.at||'')){ S.p[id]={b:r.b||0, at:r.at||'', h:(typeof r.h==='string'?r.h:''), hd:(typeof r.hd==='string'?r.hd:'')}; ch=true; }
   }
   if(d.day===today()){
     if((d.n||0)>S.n){ S.n=d.n; ch=true; }
@@ -1186,7 +1195,8 @@ function apply(b,recount,sec,ok){
   if(!recount) lg('ans',{id:cur.id,b:b,p:Object.keys(S.p).length+1,n:S.n+1,ok:ok?1:0,...(cur.t==='ox'?{s:cur._ans?1:0}:{})});  // s: ○×問題で出した版（1=○の文 0=×の文）
   /* 履歴を積むのは実際に答えたときだけ。あとから定着度を付け直しても回数は増やさない。 */
   const h = recount ? hist(cur.id) : pushHist(cur.id,ok);
-  S.p[cur.id]={b:b,at:new Date().toISOString(),h:h};
+  const hd = recount ? histD(cur.id) : pushHistD(cur.id);
+  S.p[cur.id]={b:b,at:new Date().toISOString(),h:h,hd:hd};
   if(!recount){ S.n++; S.t+=(sec||0); }
   // 当日分を日別ログにも書く。日付を跨いでアプリを開かなくても記録が残る
   S.daily[S.day]=S.n; S.log[S.day]=S.t;
@@ -1197,9 +1207,13 @@ function showRec(sec){
   const left=4-b;
   const h=hist(cur.id);
   /* 直近10回を古い→新しいの順に並べる。右端が今回。 */
-  const marks = h ? ' 　' + [...h].map(c=>c==='1'
+  /* 日付があれば「0911✕/1223⚪︎」の形で出す（年は省く）。日付の無い古い回は記号だけ */
+  const hd=histD(cur.id), off=h.length-hd.length/4;
+  const marks = h ? '<div class="hist">' + [...h].map((c,i)=>{
+      const dt = i>=off ? hd.substr((i-off)*4,4) : '';
+      return dt + (c==='1'
       ? '<span style="color:var(--maru)">⚪︎</span>'
-      : '<span style="color:var(--batsu)">✕</span>').join('') : '';
+      : '<span style="color:var(--batsu)">✕</span>'); }).join('<span class="hsep">/</span>') + '</div>' : '';
   document.getElementById('rec').innerHTML =
     `記録: <b>${LV[b]}</b>` + (b>=4?'（復習不要）':`（完璧まであと${left}回）`)
     + (typeof sec==='number' ? `　⏱ <b>${fmt(sec)}</b>` : '') + marks;
