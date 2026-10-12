@@ -425,7 +425,7 @@ const Q = [{"t": "ox", "ch": 1, "law": "社会保障・統計", "cat": "社会�
 /* 版スタンプ。VER は「この行を伏せたファイル内容」の sha256 先頭8桁で、
    npm test（scripts/version-stamp.mjs）が一致を強制する。
    内容を変えれば必ず変わるので、画面の値を見れば新旧を判別できる。 */
-const VER='69594196';
+const VER='e81a2cb7';
 const KEY='dd_shaichi_ch12_v1';
 const LV=['未学習','要復習','不安あり','覚えた','完璧'];
 const LVC=['#64748b','#ef4444','#eab308','#22c55e','#3b82f6'];
@@ -585,6 +585,7 @@ function priority(id){
   s += LVW[b];                                         // 要復習・不安ありほど高い
   s += (r===null ? 0 : r*30);                          // よく間違える
   if(h && h[h.length-1]==='0') s += 20;                // 直近で間違えた
+  if(g===0) s -= 300;                                 // 今日答えた問題は、ほかに出す問題がないときだけ
   return s;                                           // 同点のばらしは byPriority の揺らぎ（±8）で行う
 }
 function due(id){
