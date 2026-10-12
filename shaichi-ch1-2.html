@@ -366,7 +366,7 @@ const Q = [{"t": "ox", "ch": 1, "law": "社会保障・統計", "cat": "社会�
 /* 版スタンプ。VER は「この行を伏せたファイル内容」の sha256 先頭8桁で、
    npm test（scripts/version-stamp.mjs）が一致を強制する。
    内容を変えれば必ず変わるので、画面の値を見れば新旧を判別できる。 */
-const VER='ad6ce7c0';
+const VER='662c2173';
 const KEY='dd_shaichi_ch12_v1';
 const LV=['未学習','要復習','不安あり','覚えた','完璧'];
 const LVC=['#64748b','#ef4444','#eab308','#22c55e','#3b82f6'];
@@ -593,7 +593,9 @@ function renderHome(){
    総合版のデータには一切触れない。 */
 const FBCFG={apiKey:"AIzaSyAdU1F-JtSC4j-wvqbaUJGTIosW6mOkEck",authDomain:"sharoushi-quiz-73790.firebaseapp.com",projectId:"sharoushi-quiz-73790",storageBucket:"sharoushi-quiz-73790.firebasestorage.app",messagingSenderId:"859893882829",appId:"1:859893882829:web:b2d05225c3c7acf6612e84"};
 const FIELD='shaichi_ch12';
-let fbReady=false, syncDoc=null, unsub=null, pushTimer=null, applyingRemote=false;
+/* var にしている理由：日付が変わって最初に開いたとき、起動処理の saveS() → schedulePush() がこの行より先に走る。
+   let だと宣言前の参照で例外になり、スクリプトが止まってボタンが効かなくなる（2026-10-12 確認）。 */
+var fbReady=false, syncDoc=null, unsub=null, pushTimer=null, applyingRemote=false;
 /* 初回スナップショットを受け取るまでは絶対に push しない。
    受け取る前に push すると、この端末の空の記録がクラウド側の記録を上書きして消す。 */
 let firstSnap=false, remoteN=0, allowEmptyPush=false, remoteDiag=null;
