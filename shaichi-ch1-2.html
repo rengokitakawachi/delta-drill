@@ -427,7 +427,7 @@ const Q = [{"t": "ox", "ch": 1, "law": "社会保障・統計", "cat": "社会�
 /* 版スタンプ。VER は「この行を伏せたファイル内容」の sha256 先頭8桁で、
    npm test（scripts/version-stamp.mjs）が一致を強制する。
    内容を変えれば必ず変わるので、画面の値を見れば新旧を判別できる。 */
-const VER='2ac188f1';
+const VER='ee5b5d6e';
 const KEY='dd_shaichi_ch12_v1';
 const LV=['未学習','要復習','不安あり','覚えた','完璧'];
 const LVC=['#64748b','#ef4444','#eab308','#22c55e','#3b82f6'];
@@ -1127,11 +1127,25 @@ function spotPick(k){
   const ok=bs[k].dataset.hit==='1';
   const d=document.createElement('div');
   d.className='spotres';
-  // 誤り箇所は一意とは限らない。「AはBである」が偽なら A を直しても B を直しても真にできる。
-  // 外したときに「不正解」と言い切らないのはそのため（タップは採点対象でもない）。
-  d.innerHTML=(ok?'⭕ そこです。':'この設問が問うているのは色の付いた箇所。')+`正しくは <b>${cur.r||''}</b>`;
+  // 誤り箇所を外したら、×が当たっていても不正解として記録し直す（2026-10-12 木下氏）。
+  // 理由を取り違えたまま×が当たっただけで、覚えたことにはならないため。
+  if(!ok) spotMiss();
+  d.innerHTML=(ok?'⭕ そこです。':'外れ。この設問が問うているのは色の付いた箇所。')+`正しくは <b>${cur.r||''}</b>`
+    +(ok?'':'<br>誤り箇所を外したので、記録は不正解（要復習）にしました。');
   document.getElementById('spot').appendChild(d);
   setTimeout(revealFb,ok?450:900);
+}
+/* 誤り箇所を外したとき、答えた直後に書いた「正解」の記録を「不正解」に書き換える。
+   回数は増やさない（同じ1回の答えの扱いを直すだけ）。定着度は不正解と同じく要復習にする。 */
+let lastSec;
+function spotMiss(){
+  const p=S.p[cur.id]; if(!p) return;
+  const h=hist(cur.id);
+  if(h && h.slice(-1)==='1') p.h=h.slice(0,-1)+'0';
+  p.b=1; p.at=new Date().toISOString();
+  saveS();
+  lg('spotmiss',{id:cur.id});
+  showRec(lastSec);
 }
 function revealFb(){
   document.getElementById('spot').classList.add('spotted');   // 選び終えたら選択肢をたたみ、結果の1行だけ残す
@@ -1175,7 +1189,7 @@ function feedback(ok,correctLabel,unk){
     +(cur.detail?`<div class="detail">${cur.detail}</div>`:'')
     +scoreLine(cur)
     +refLine(cur.page);
-  const sec=stopTimer();
+  const sec=stopTimer(); lastSec=sec;
   saveSession();                        // 回答済みであることを残す（中断→再開で同じ問題に戻らない）
   /* 正しく × と答えたときだけ、誤り箇所を問う。
      〇 の問題や、× を見抜けなかったときは挟まない（答えを教えることになるため）。 */
