@@ -204,6 +204,24 @@ body.incard header{display:none}
 .spot.spotted .lb,.spot.spotted .chips,.spot.spotted .skip{display:none}
 .spot.spotted{padding:6px 10px;margin-top:6px}
 .spot.spotted .spotres{margin-top:0}
+/* iPad（幅744px以上）は縦に余裕があるので、詰めた余白を少し戻して読みやすくする（2026-10-12） */
+@media (min-width:744px){
+  #card.done .qtext{margin:4px 0 14px;line-height:1.8}
+  #card.done .lawbar{padding:9px 12px;margin:0 0 10px}
+  #card.done .meta{margin-bottom:8px}
+  .fb{margin-top:12px}
+  .verdict{padding:10px 14px;margin-bottom:10px}
+  .exp{padding:14px 16px;line-height:1.75}
+  .flip{margin:0 0 10px;padding:8px 11px;line-height:1.6}
+  .detail{margin-top:10px;padding-top:10px;line-height:1.75}
+  .score{margin-top:10px;padding-top:10px;line-height:1.65}
+  .reflink{margin-top:10px;padding:7px 11px}
+  .spot.spotted{padding:10px 14px;margin-top:10px}
+  .rec{margin-top:12px;padding:9px 12px}
+  .selfrate{margin-top:12px}
+  .selfrate button{padding:10px 4px}
+  .next{margin-top:14px;padding:15px}
+}
 </style>
 <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-auth-compat.js"></script>
@@ -368,7 +386,7 @@ const Q = [{"t": "ox", "ch": 1, "law": "社会保障・統計", "cat": "社会�
 /* 版スタンプ。VER は「この行を伏せたファイル内容」の sha256 先頭8桁で、
    npm test（scripts/version-stamp.mjs）が一致を強制する。
    内容を変えれば必ず変わるので、画面の値を見れば新旧を判別できる。 */
-const VER='337810db';
+const VER='41165961';
 const KEY='dd_shaichi_ch12_v1';
 const LV=['未学習','要復習','不安あり','覚えた','完璧'];
 const LVC=['#64748b','#ef4444','#eab308','#22c55e','#3b82f6'];
