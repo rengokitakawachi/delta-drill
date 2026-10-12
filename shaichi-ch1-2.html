@@ -287,13 +287,15 @@ body.incard header{display:none}
     <h2>出題</h2>
     <div class="btnrow">
       <button class="mbtn primary" onclick="start('auto')">おまかせ出題
-        <small>直近10回の成否・定着度・復習期限で重みづけして出します</small></button>
+        <small>完璧を除く <span id="dailyN">0</span>問から、前回からの間隔・定着度・直近の成否で重みづけして出します</small></button>
       <button class="mbtn resume" id="btnResume" onclick="resume()" style="display:none">▶ 続きから
         <small id="resumeN"></small></button>
       <button class="mbtn" id="btnRev" onclick="start('review')">復習優先出題
         <small><span id="dueN">0</span>問が復習期限に達しています</small></button>
       <button class="mbtn" id="btnNew" onclick="start('new')">未出題から
         <small id="newN"></small></button>
+      <button class="mbtn" id="btnPerf" onclick="start('perfect')">完璧の確認テスト
+        <small id="perfN"></small></button>
       <button class="mbtn" onclick="start('ch1')">1章 社会保険の概要（p.9〜26）
         <small id="c1n"></small></button>
       <button class="mbtn" onclick="start('ch2')">2章 国民健康保険法（p.27〜62）
@@ -425,7 +427,7 @@ const Q = [{"t": "ox", "ch": 1, "law": "社会保障・統計", "cat": "社会�
 /* 版スタンプ。VER は「この行を伏せたファイル内容」の sha256 先頭8桁で、
    npm test（scripts/version-stamp.mjs）が一致を強制する。
    内容を変えれば必ず変わるので、画面の値を見れば新旧を判別できる。 */
-const VER='e81a2cb7';
+const VER='0ad0dbce';
 const KEY='dd_shaichi_ch12_v1';
 const LV=['未学習','要復習','不安あり','覚えた','完璧'];
 const LVC=['#64748b','#ef4444','#eab308','#22c55e','#3b82f6'];
@@ -590,7 +592,8 @@ function priority(id){
 }
 function due(id){
   const r=S.p[id]; if(!r) return true;            // 未学習は常に対象
-  if(r.b<=1) return true;                          // 要復習は即
+  if(daysSince(id)===0) return false;              // 今日答えた問題は出さない（同じ日に繰り返さない）
+  if(r.b<=1) return true;                          // 要復習は翌日から
   const d=new Date(r.at); d.setDate(d.getDate()+IV[r.b]);
   return d<=new Date();
 }
@@ -608,7 +611,12 @@ function toggleType(t){
   renderHome();
 }
 function QA(){ return QS().filter(q=>typeOn(q.t)); }
-function dueList(){return QA().filter(q=>box(q.id)>0&&due(q.id));}
+/* 毎日の出題（2026-10-12〜）は完璧を外す。完璧は「完璧の確認テスト」でだけ出し、間違えたら要復習に戻って毎日の出題に復帰する */
+function QD(){ return QA().filter(q=>box(q.id)!==4); }
+const PERFECT_CHECK=14;                        // 前回からこの日数以上たった完璧を「確認時期」とする
+function perfectList(){ return QA().filter(q=>box(q.id)===4); }
+function perfectDue(){ return perfectList().filter(q=>{ const g=daysSince(q.id); return g===null || g>=PERFECT_CHECK; }); }
+function dueList(){return QD().filter(q=>box(q.id)>0&&due(q.id));}
 
 function renderHome(){
   document.body.classList.remove('incard');
@@ -628,6 +636,12 @@ function renderHome(){
   const dn=dueList().length;
   document.getElementById('dueN').textContent=dn;
   document.getElementById('btnRev').disabled = dn===0;
+  document.getElementById('dailyN').textContent=QD().length;
+  const pl=perfectList().length, pd=perfectDue().length;
+  document.getElementById('perfN').textContent = pl
+    ? `完璧 ${pl}問のうち、前回から${PERFECT_CHECK}日以上たった問題 ${pd}問。間違えたら要復習に戻ります`
+    : '完璧の問題はまだありません';
+  document.getElementById('btnPerf').disabled = pl===0;
   const nn=QA().filter(q=>box(q.id)===0).length;
   document.getElementById('newN').textContent = nn?`まだ解いていない ${nn}問から出します`:'未出題はありません';
   document.getElementById('btnNew').disabled = nn===0;
@@ -979,9 +993,11 @@ function byPriority(list){
 }
 function start(mode){
   const cm=/^ch(\d+)$/.exec(mode);
-  const A=QA();
+  const A=QD();                                    // 毎日の出題は完璧を除く
   if(cm) pool=shuffle(A.filter(q=>q.ch===+cm[1]));
-  else if(mode==='all') pool=shuffle(A.slice());
+  else if(mode==='all') pool=shuffle(QA().slice()); // 全問を通しでは完璧も含める
+  else if(mode==='perfect')                         // 完璧の確認テスト: 前回から間があいている順
+    pool=perfectList().map(q=>({q:q,g:daysSince(q.id)})).sort((a,b)=>(b.g===null?1e9:b.g)-(a.g===null?1e9:a.g)).map(x=>x.q).slice(0,GOAL);
   else if(mode==='review') pool=shuffle(dueList());
   else if(mode==='new'){                   // 未出題優先: 未出題 → 足りない分はおまかせの順
     const fresh=shuffle(A.filter(q=>box(q.id)===0));
@@ -1176,7 +1192,7 @@ function feedback(ok,correctLabel,unk){
     revealFb();
   }
   // 自動記録する。初回正解=覚えた／以降の正解=1段階上げる／不正解=どこからでも要復習
-  apply(ok ? nextBox(box(cur.id)) : 1, false, sec, ok);
+  apply(ok ? nextBox(box(cur.id),cur.id) : 1, false, sec, ok);
   showRec(sec);
   document.getElementById('selfrate').style.display='block';
   document.getElementById('nextBtn').textContent=(idx===pool.length-1)?'ホームへ →':'次の問題 →';
@@ -1205,7 +1221,19 @@ function revealBlank(){
 function ansSelf(ok){ if(answered)return; feedback(ok, cur._ans); }
 
 /* 正解時の遷移。未学習からの初回正解は「覚えた」まで一気に上げる */
-function nextBox(b){ return b===0 ? 3 : Math.min(b+1,4); }
+/* 正解したときの次の定着度。初回正解は覚えた、それ以外は1段上げる。
+   完璧に上がるのは（2026-10-12〜）、直近3回が続けて正解で、3回目の正解が前回の回答から7日以上あいたときだけ。
+   条件を満たさなければ覚えたのまま。id を渡さない呼び出しは従来どおり */
+const PERFECT_GAP=7;
+function nextBox(b,id){
+  if(b===0) return 3;
+  if(b===3 && id){
+    const h=hist(id), g=daysSince(id);
+    const streak = h.length>=2 && h.slice(-2)==='11';      // 今回を足すと3回連続
+    return (streak && g!==null && g>=PERFECT_GAP) ? 4 : 3;
+  }
+  return Math.min(b+1,4);
+}
 
 function apply(b,recount,sec,ok){
   if(!recount) lg('ans',{id:cur.id,b:b,p:Object.keys(S.p).length+1,n:S.n+1,ok:ok?1:0,...(cur.t==='ox'?{s:cur._ans?1:0}:{})});  // s: ○×問題で出した版（1=○の文 0=×の文）
