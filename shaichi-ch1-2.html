@@ -200,6 +200,10 @@ border-radius:9px;padding:10px;font-size:12px;font-weight:700;cursor:pointer}
   .exp{padding:11px 13px} .score{font-size:13px}
   .selfrate button{padding:7px 4px} .next{padding:13px}
 }
+body.incard header{display:none}
+.spot.spotted .lb,.spot.spotted .chips,.spot.spotted .skip{display:none}
+.spot.spotted{padding:6px 10px;margin-top:6px}
+.spot.spotted .spotres{margin-top:0}
 </style>
 <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-auth-compat.js"></script>
@@ -366,7 +370,7 @@ const Q = [{"t": "ox", "ch": 1, "law": "社会保障・統計", "cat": "社会�
 /* 版スタンプ。VER は「この行を伏せたファイル内容」の sha256 先頭8桁で、
    npm test（scripts/version-stamp.mjs）が一致を強制する。
    内容を変えれば必ず変わるので、画面の値を見れば新旧を判別できる。 */
-const VER='662c2173';
+const VER='4776665e';
 const KEY='dd_shaichi_ch12_v1';
 const LV=['未学習','要復習','不安あり','覚えた','完璧'];
 const LVC=['#64748b','#ef4444','#eab308','#22c55e','#3b82f6'];
@@ -531,6 +535,7 @@ function QA(){ return QS().filter(q=>typeOn(q.t)); }
 function dueList(){return QA().filter(q=>box(q.id)>0&&due(q.id));}
 
 function renderHome(){
+  document.body.classList.remove('incard');
   const c=counts(), tot=QS().length;
   const pct=QS().reduce((a,q)=>a+W[box(q.id)],0)/tot*100;
   document.getElementById('progPct').textContent=pct.toFixed(1)+'%';
@@ -910,6 +915,7 @@ function start(mode){
   if(!pool.length){alert('対象の問題がありません');return;}
   idx=0;lg('start',{mode:mode,n:pool.length});
   document.getElementById('home').style.display='none';
+  document.body.classList.add('incard');   // 出題中はページ上部の見出しを隠し、縦の場所を空ける
   document.getElementById('card').style.display='flex';load();saveSession();
 }
 
@@ -931,6 +937,7 @@ function load(){
   document.getElementById('cnt').textContent=`${idx+1} / ${pool.length}　${LV[box(cur.id)]}`;
   document.getElementById('fb').style.display='none';
   document.getElementById('spot').style.display='none';
+  document.getElementById('spot').classList.remove('spotted');
   startTimer();
   if(cur.t==='ox'){
     document.getElementById('qtext').innerHTML=cur._text;
@@ -1034,7 +1041,10 @@ function spotPick(k){
   document.getElementById('spot').appendChild(d);
   setTimeout(revealFb,ok?450:900);
 }
-function revealFb(){ document.getElementById('fb').style.display='block'; }
+function revealFb(){
+  document.getElementById('spot').classList.add('spotted');   // 選び終えたら選択肢をたたみ、結果の1行だけ残す
+  document.getElementById('fb').style.display='block';
+}
 
 /* 重み付けの点数の内訳（2026-10-12）。
    過去問でそのまま問われた点 +5/件、★5 +2・★4 +1、Aゾーン +1、教材の色 赤3・青2・太字1、法改正 +2。
