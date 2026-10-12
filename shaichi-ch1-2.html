@@ -213,7 +213,6 @@ body.incard header{display:none}
 <div class="wrap">
 <header>
   <h1>delta drill</h1>
-  <div class="sub">2027年版（第59回対策）／⑩基礎講座 社会保険に関する一般常識 p.9〜p.233</div>
 </header>
 
 <div id="home">
@@ -352,7 +351,6 @@ body.incard header{display:none}
         <div class="exp" id="exp"></div>
     <div class="rec" id="rec"></div>
     <div class="selfrate" id="selfrate">
-      <div class="lb">自動で記録済み。変えたいときだけタップ</div>
       <div class="opts">
         <button id="rb1" onclick="rate(1)">要復習<small>あと3回</small></button>
         <button id="rb2" onclick="rate(2)">不安あり<small>あと2回</small></button>
@@ -370,7 +368,7 @@ const Q = [{"t": "ox", "ch": 1, "law": "社会保障・統計", "cat": "社会�
 /* 版スタンプ。VER は「この行を伏せたファイル内容」の sha256 先頭8桁で、
    npm test（scripts/version-stamp.mjs）が一致を強制する。
    内容を変えれば必ず変わるので、画面の値を見れば新旧を判別できる。 */
-const VER='40b7d546';
+const VER='02291f6f';
 const KEY='dd_shaichi_ch12_v1';
 const LV=['未学習','要復習','不安あり','覚えた','完璧'];
 const LVC=['#64748b','#ef4444','#eab308','#22c55e','#3b82f6'];
@@ -915,7 +913,6 @@ function start(mode){
   if(!pool.length){alert('対象の問題がありません');return;}
   idx=0;lg('start',{mode:mode,n:pool.length});
   document.getElementById('home').style.display='none';
-  document.body.classList.add('incard');   // 出題中はページ上部の見出しを隠し、縦の場所を空ける
   document.getElementById('card').style.display='flex';load();saveSession();
 }
 
@@ -930,10 +927,11 @@ function draw(q){
 }
 function load(){
   cur=pool[idx];answered=false;
+  document.body.classList.add('incard');   // 出題中はページ上部の見出しを隠す（中断からの再開でも効くよう load で付ける）
   document.getElementById('card').classList.remove('done');
   const d=draw(cur); cur._text=d.text; cur._ans=d.ans;
   document.getElementById('lawbar').textContent=cur.law;
-  document.getElementById('tag').textContent=`${cur.ch}章 ${cur.cat}・p.${cur.page}`;
+  document.getElementById('tag').textContent=`⑩社会一般常識・p.${cur.page}`;
   document.getElementById('cnt').textContent=`${idx+1} / ${pool.length}　${LV[box(cur.id)]}`;
   document.getElementById('fb').style.display='none';
   document.getElementById('spot').style.display='none';
