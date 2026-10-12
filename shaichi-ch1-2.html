@@ -256,6 +256,12 @@ body.incard header{display:none}
 /* わからないボタン（2026-10-12）。○×より控えめにする */
 .btns .bunk{flex:0.7;background:var(--card2);border:1px solid var(--line);color:var(--sub);font-size:14px;font-weight:700}
 @media (min-width:744px){ .btns .bunk{font-size:18px} }
+/* 複数の穴（2026-10-12）。いま答える穴を強調し、答えた穴は正誤の色で正解を出す */
+.qtext b.bcur{background:rgba(250,204,21,.18);border-radius:6px}
+.qtext b.bok{color:var(--maru)}
+.qtext b.bng{color:var(--batsu)} .qtext b.bng s{opacity:.7}
+.chbtns .senstep{font-size:12.5px;color:var(--sub);text-align:center}
+@media (min-width:744px){ .chbtns .senstep{font-size:16px} }
 /* 正答履歴（日付つき）は記録の下の行に出す */
 .rec .hist{margin-top:3px;font-size:11.5px;color:var(--sub);font-variant-numeric:tabular-nums;line-height:1.6;word-break:break-all}
 .rec .hsep{color:#475569;margin:0 3px}
@@ -427,7 +433,7 @@ const Q = [{"t": "ox", "ch": 1, "law": "社会保障・統計", "cat": "社会�
 /* 版スタンプ。VER は「この行を伏せたファイル内容」の sha256 先頭8桁で、
    npm test（scripts/version-stamp.mjs）が一致を強制する。
    内容を変えれば必ず変わるので、画面の値を見れば新旧を判別できる。 */
-const VER='4bc51a56';
+const VER='53ecda2d';
 const KEY='dd_shaichi_ch12_v1';
 const LV=['未学習','要復習','不安あり','覚えた','完璧'];
 const LVC=['#64748b','#ef4444','#eab308','#22c55e','#3b82f6'];
@@ -1036,23 +1042,13 @@ function load(){
     document.getElementById('oxbtns').style.display='flex';
     document.getElementById('chbtns').style.display='none';
   }else{
-    /* 空欄が複数ある問題では、出題する1つ目だけを空欄にし、
-       残りは正解で埋める。旧版は1つ目しか置換せず、2つ目以降が
-       選択肢ごと（【A|B|C|D】）画面に出て答えが漏れていた。 */
-    /* 空欄が複数あるときは、出題のたびにどれを抜くかをランダムに選ぶ。
-       抜かない空欄は正解で埋める。 */
-    const gs=[...cur.text.matchAll(/【(.+?)】/g)];
-    const pick=Math.floor(Math.random()*gs.length);
-    const opts=shuffle(gs[pick][1].split('|'));
-    cur._ans=gs[pick][1].split('|')[0];
-    let k=0;
-    const body=cur.text.replace(/【(.+?)】/g,(mm,g)=> (k++===pick) ? '<b class="blank">（　　　）</b>' : g.split('|')[0]);
-    document.getElementById('qtext').innerHTML=body;
-    const cb=document.getElementById('chbtns');
-    cb.innerHTML = senMode()==='blank'
-      ? '<button onclick="revealBlank()" style="text-align:center">答えを見る</button>'
-      : opts.map(o=>`<button onclick="ansSel(this.dataset.v)" data-v="${o}">${o}</button>`).join('');
-    document.getElementById('oxbtns').style.display='none';cb.style.display='flex';
+    /* 穴埋め（2026-10-12〜）。空欄が複数あれば A・B・C の順に1つずつ答え、答えるたびにその穴の正解を開く。
+       全部当たれば正解。旧版は1つだけをランダムに抜き、残りの穴を正解で埋めて見せていた（答えが漏れていた）。 */
+    cur._gs=[...cur.text.matchAll(/【(.+?)】/g)].map(m=>{ const o=m[1].split('|'); return {ans:o[0], opts:shuffle(o.slice())}; });
+    cur._k=0; cur._res=[];
+    cur._ans=cur._gs.map(g=>g.ans).join('／');
+    renderSen();
+    document.getElementById('oxbtns').style.display='none';document.getElementById('chbtns').style.display='flex';
   }
 }
 
@@ -1214,7 +1210,35 @@ function feedback(ok,correctLabel,unk){
 function ans(v){ if(answered)return; feedback(v===cur._ans, cur._ans?'⚪︎（正しい）':'✕（誤り）'); }
 /* わからない：不正解と同じく要復習として記録し、誤り箇所の問いは挟まずに解説を出す */
 function ansUnknown(){ if(answered)return; feedback(false, cur._ans?'⚪︎（正しい）':'✕（誤り）', true); }
-function ansSel(v){ if(answered)return; feedback(v===cur._ans, cur._ans); }
+const SEN_LB='ABCDE';
+function senLabel(i){ return cur._gs.length>1 ? SEN_LB[i] : ''; }
+/* 問題文と、いま答える穴の選択肢を描く。答えた穴は正誤の色で正解を開く */
+function renderSen(){
+  const n=cur._gs.length, k=cur._k;
+  let i=0;
+  const body=cur.text.replace(/【(.+?)】/g,()=>{
+    const g=cur._gs[i], lb=senLabel(i), r=cur._res[i]; let out;
+    if(r) out = r.ok ? `<b class="blank bok">${lb?lb+' ':''}${g.ans}</b>`
+                     : `<b class="blank bng">${lb?lb+' ':''}${r.v?'<s>'+r.v+'</s>→':''}${g.ans}</b>`;
+    else out = `<b class="blank${i===k?' bcur':''}">（${lb||'　　　'}）</b>`;
+    i++; return out; });
+  document.getElementById('qtext').innerHTML=body;
+  if(k<0) return;                        // 全部答え終えた（採点後は選択肢を出さない）
+  const g=cur._gs[k], lb=senLabel(k), cb=document.getElementById('chbtns');
+  cb.innerHTML = (lb?`<div class="senstep">${lb} の空欄（${k+1} / ${n}）</div>`:'')
+    + (senMode()==='blank'
+      ? `<button onclick="revealBlank()" style="text-align:center">${lb?lb+' の':''}答えを見る</button>`
+      : g.opts.map(o=>`<button onclick="ansSel(this.dataset.v)" data-v="${o}">${o}</button>`).join(''));
+}
+/* 1つの穴を答え終えた。残りがあれば次の穴へ、なければ採点（全部当たれば正解） */
+function senDone(ok,v){
+  cur._res[cur._k]={ok:ok,v:v};
+  cur._k++;
+  if(cur._k<cur._gs.length){ renderSen(); return; }
+  cur._k=-1; renderSen();
+  feedback(cur._res.every(r=>r.ok), cur._gs.map((g,i)=>(senLabel(i)?senLabel(i)+' ':'')+g.ans).join('／'));
+}
+function ansSel(v){ if(answered)return; senDone(v===cur._gs[cur._k].ans, v); }
 
 /* 穴埋め問題の答え方。
    'blank'  … 選択肢を出さず、空欄の語を自分で考えてから答えを見て、正解か不正解かを自己申告する
@@ -1225,14 +1249,15 @@ function senMode(){ try{ const m=localStorage.getItem('sen_mode'); return (m==='
 function setSenMode(m){ try{ localStorage.setItem('sen_mode',m); }catch(e){} renderHome(); }
 function revealBlank(){
   if(answered) return;
-  const bl=document.querySelector('#qtext b.blank');
-  if(bl) bl.textContent='（'+cur._ans+'）';
+  const g=cur._gs[cur._k], lb=senLabel(cur._k);
+  const bl=document.querySelector('#qtext b.bcur');
+  if(bl) bl.textContent='（'+(lb?lb+' ':'')+g.ans+'）';
   document.getElementById('chbtns').innerHTML=
-    `<div class="blankans">正解：<b>${cur._ans}</b></div>`
+    `<div class="blankans">${lb?lb+' の':''}正解：<b>${g.ans}</b></div>`
     +'<div class="selfrow"><button style="background:var(--maru)" onclick="ansSelf(true)">⭕ 正解だった</button>'
     +'<button style="background:var(--batsu)" onclick="ansSelf(false)">❌ 不正解だった</button></div>';
 }
-function ansSelf(ok){ if(answered)return; feedback(ok, cur._ans); }
+function ansSelf(ok){ if(answered)return; senDone(ok, ''); }
 
 /* 正解時の遷移。未学習からの初回正解は「覚えた」まで一気に上げる */
 /* 正解したときの次の定着度。初回正解は覚えた、それ以外は1段上げる。
