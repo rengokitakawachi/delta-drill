@@ -433,7 +433,7 @@ const Q = [{"t": "ox", "ch": 1, "law": "社会保障・統計", "cat": "社会�
 /* 版スタンプ。VER は「この行を伏せたファイル内容」の sha256 先頭8桁で、
    npm test（scripts/version-stamp.mjs）が一致を強制する。
    内容を変えれば必ず変わるので、画面の値を見れば新旧を判別できる。 */
-const VER='53ecda2d';
+const VER='123c1128';
 const KEY='dd_shaichi_ch12_v1';
 const LV=['未学習','要復習','不安あり','覚えた','完璧'];
 const LVC=['#64748b','#ef4444','#eab308','#22c55e','#3b82f6'];
@@ -820,7 +820,7 @@ function mergeRemote(d){
   if(d.diag&&Array.isArray(d.diag)) remoteDiag=d.diag;
   if(d.p) for(const id in d.p){
     const r=d.p[id]||{}, l=S.p[id];
-    if(!l || (r.at||'')>(l.at||'')){ S.p[id]={b:r.b||0, at:r.at||'', h:(typeof r.h==='string'?r.h:''), hd:(typeof r.hd==='string'?r.hd:'')}; ch=true; }
+    if(!l || (r.at||'')>(l.at||'')){ S.p[id]={b:r.b||0, at:r.at||'', h:(typeof r.h==='string'?r.h:''), hd:(typeof r.hd==='string'?r.hd:''), ...(typeof r.bh==='string'?{bh:r.bh}:{})}; ch=true; }
   }
   if(d.day===today()){
     if((d.n||0)>S.n){ S.n=d.n; ch=true; }
@@ -1026,7 +1026,7 @@ function draw(q){
                            : {text:q.qx, ans:false, flipped:true};
 }
 function load(){
-  cur=pool[idx];answered=false;
+  cur=pool[idx];answered=false; if(cur) cur._bhNew=null;
   document.body.classList.add('incard');   // 出題中はページ上部の見出しを隠す（中断からの再開でも効くよう load で付ける）
   document.getElementById('card').classList.remove('done');
   const d=draw(cur); cur._text=d.text; cur._ans=d.ans;
@@ -1044,7 +1044,9 @@ function load(){
   }else{
     /* 穴埋め（2026-10-12〜）。空欄が複数あれば A・B・C の順に1つずつ答え、答えるたびにその穴の正解を開く。
        全部当たれば正解。旧版は1つだけをランダムに抜き、残りの穴を正解で埋めて見せていた（答えが漏れていた）。 */
-    cur._gs=[...cur.text.matchAll(/【(.+?)】/g)].map(m=>{ const o=m[1].split('|'); return {ans:o[0], opts:shuffle(o.slice())}; });
+    const all=[...cur.text.matchAll(/【(.+?)】/g)].map(m=>{ const o=m[1].split('|'); return {ans:o[0], opts:shuffle(o.slice())}; });
+    cur._pick=senPick(all.length, cur.ng, senBh(cur.id,all.length));          // 空ける穴（出現順の番号）。残りの穴は正解で埋めて見せる
+    cur._gs=cur._pick.map(i=>all[i]);
     cur._k=0; cur._res=[];
     cur._ans=cur._gs.map(g=>g.ans).join('／');
     renderSen();
@@ -1211,17 +1213,62 @@ function ans(v){ if(answered)return; feedback(v===cur._ans, cur._ans?'⚪︎（�
 /* わからない：不正解と同じく要復習として記録し、誤り箇所の問いは挟まずに解説を出す */
 function ansUnknown(){ if(answered)return; feedback(false, cur._ans?'⚪︎（正しい）':'✕（誤り）', true); }
 const SEN_LB='ABCDE';
+/* 空ける穴を選ぶ（2026-10-13 木下氏と決定）。
+   穴は1つの文に5つまで持てる。出題のたびに最大 SEN_MAX 個を、穴ごとの記録 bh で重みを付けて選ぶ。
+     bh … 穴ごとに1文字。'-' まだ聞かれていない／'0' 前回外した／'1' 前回当てた
+     重み … まだ 4・外した 3・当てた 1（点数の低い穴や当てた穴ばかりにならないように）
+   問題ごとの ng で、空けてはいけない組み合わせを除く。
+     ng.both: [[i,j,…]] … 全部を同時に空けると手がかりが無くなる組み合わせ
+     ng.hint: [[i,j]]   … j が開いていると i の答えのヒントになる（i を空けるなら j も空け、i を先に答える）
+   番号は文中の穴の出現順（0 始まり）。条件を満たす組が無ければ、空ける数を1つ減らして探す。 */
+const SEN_MAX=3, SEN_W={'-':4,'0':3,'1':1};
+function senBh(id,n){ const b=(S.p[id]&&S.p[id].bh)||''; return (typeof b==='string'&&b.length===n)?b:'-'.repeat(n); }
+function senOk(set,ng){
+  if(!ng) return true;
+  for(const c of ng.both||[]) if(c.every(i=>set.includes(i))) return false;
+  for(const [i,j] of ng.hint||[]) if(set.includes(i) && !set.includes(j)) return false;
+  return true;
+}
+function senDraw(n,m,bh){                      // 重み付きで m 個を重複なく引く
+  const left=[...Array(n).keys()], out=[];
+  while(out.length<m && left.length){
+    const ws=left.map(i=>SEN_W[bh[i]]||1), tot=ws.reduce((a,b)=>a+b,0);
+    let r=Math.random()*tot, k=0;
+    while(r>=ws[k]){ r-=ws[k]; k++; }
+    out.push(left.splice(k,1)[0]);
+  }
+  return out;
+}
+function senOrder(set,ng){                     // 答える順。出現順を基本に、ヒントを受ける側を先にする
+  const o=set.slice().sort((a,b)=>a-b);
+  for(const [i,j] of (ng&&ng.hint)||[]){
+    const a=o.indexOf(i), b=o.indexOf(j);
+    if(a>=0 && b>=0 && a>b){ o.splice(a,1); o.splice(b,0,i); }
+  }
+  return o;
+}
+function senPick(n,ng,bh){
+  for(let m=Math.min(SEN_MAX,n); m>=1; m--){
+    for(let t=0;t<200;t++){
+      const set=senDraw(n,m,bh);
+      if(senOk(set,ng)) return senOrder(set,ng);
+    }
+  }
+  return [0];
+}
 function senLabel(i){ return cur._gs.length>1 ? SEN_LB[i] : ''; }
 /* 問題文と、いま答える穴の選択肢を描く。答えた穴は正誤の色で正解を開く */
 function renderSen(){
   const n=cur._gs.length, k=cur._k;
-  let i=0;
-  const body=cur.text.replace(/【(.+?)】/g,()=>{
+  let j=0;
+  const body=cur.text.replace(/【(.+?)】/g,(mm,x)=>{
+    const i=cur._pick.indexOf(j++);
+    if(i<0) return x.split('|')[0];           // 今回は空けない穴
     const g=cur._gs[i], lb=senLabel(i), r=cur._res[i]; let out;
     if(r) out = r.ok ? `<b class="blank bok">${lb?lb+' ':''}${g.ans}</b>`
                      : `<b class="blank bng">${lb?lb+' ':''}${r.v?'<s>'+r.v+'</s>→':''}${g.ans}</b>`;
     else out = `<b class="blank${i===k?' bcur':''}">（${lb||'　　　'}）</b>`;
-    i++; return out; });
+    return out; });
   document.getElementById('qtext').innerHTML=body;
   if(k<0) return;                        // 全部答え終えた（採点後は選択肢を出さない）
   const g=cur._gs[k], lb=senLabel(k), cb=document.getElementById('chbtns');
@@ -1236,6 +1283,9 @@ function senDone(ok,v){
   cur._k++;
   if(cur._k<cur._gs.length){ renderSen(); return; }
   cur._k=-1; renderSen();
+  const n=(cur.text.match(/【/g)||[]).length, bh=senBh(cur.id,n).split('');
+  cur._pick.forEach((p,i)=>{ bh[p]=cur._res[i].ok?'1':'0'; });
+  cur._bhNew=bh.join('');
   feedback(cur._res.every(r=>r.ok), cur._gs.map((g,i)=>(senLabel(i)?senLabel(i)+' ':'')+g.ans).join('／'));
 }
 function ansSel(v){ if(answered)return; senDone(v===cur._gs[cur._k].ans, v); }
@@ -1269,7 +1319,9 @@ function nextBox(b,id){
   if(b===3 && id){
     const h=hist(id), g=daysSince(id);
     const streak = h.length>=2 && h.slice(-2)==='11';      // 今回を足すと3回連続
-    return (streak && g!==null && g>=PERFECT_GAP) ? 4 : 3;
+    // 穴埋めは、全部の穴が最後に聞かれたときに正解していることも要る（2026-10-13）
+    const allBlanks = !(cur && cur.id===id && cur._bhNew) || !/[-0]/.test(cur._bhNew);
+    return (streak && allBlanks && g!==null && g>=PERFECT_GAP) ? 4 : 3;
   }
   return Math.min(b+1,4);
 }
@@ -1279,7 +1331,9 @@ function apply(b,recount,sec,ok){
   /* 履歴を積むのは実際に答えたときだけ。あとから定着度を付け直しても回数は増やさない。 */
   const h = recount ? hist(cur.id) : pushHist(cur.id,ok);
   const hd = recount ? histD(cur.id) : pushHistD(cur.id);
-  S.p[cur.id]={b:b,at:new Date().toISOString(),h:h,hd:hd};
+  const prev=S.p[cur.id]||{};
+  const bh = (!recount && cur._bhNew) ? cur._bhNew : prev.bh;     // 穴ごとの記録（穴埋めだけ）
+  S.p[cur.id]={b:b,at:new Date().toISOString(),h:h,hd:hd,...(typeof bh==='string'?{bh:bh}:{})};
   if(!recount){ S.n++; S.t+=(sec||0); }
   // 当日分を日別ログにも書く。日付を跨いでアプリを開かなくても記録が残る
   S.daily[S.day]=S.n; S.log[S.day]=S.t;

@@ -126,43 +126,70 @@ for (const q of Q) {
 // 同じ型で、s235「【65】歳以上…40歳以上65歳未満」、s236「【市町村】に置く…市町村長が任命」、
 // s237「申請のあった日から…【申請のあった日】にさかのぼる」、s021「【都道府県】は、当該都道府県内の…」も漏れていた。
 // 複数空欄の問題は出題時に1つだけ抜き、残りは正解で埋めるので、埋めた後の文で判定する。
-function senLeaks(text) {
+// 穴は1つの文に5つまで持て、出題のたびに最大3つを空ける（2026-10-13）。
+// 本文（穴でない部分）から答えが分かるのは常に漏れ。ほかの穴の正解から分かるのは、
+// q.ng.hint に [その穴, ヒントになる穴] として登録してあれば、アプリが一緒に空けるので漏れにしない。
+function leakMsgs(text, i, filled) {
   const out = [];
   const gs = [...text.matchAll(/【(.+?)】/g)];
-  gs.forEach((g, i) => {
-    const ans = g[1].split('|')[0];
-    let k = 0;
-    const rest = text.replace(/【(.+?)】/g, (mm, x) => (k++ === i ? '□' : x.split('|')[0]));
-    const after = rest.slice(rest.indexOf('□') + 1);
-    const restNo = rest.replace('□', '');
-    if (/^\d+$/.test(ans)) {
-      // 数字だけの答えは、直後の単位とあわせて文中に再登場したら漏れ（「65歳以上」と「65歳未満」）
-      const unit = (after.match(/^[^\d、。（(]/) || [''])[0];
-      if (unit && restNo.includes(ans + unit)) out.push(`答え「${ans}${unit}」が文中にもある`);
-    } else if (ans.length >= 2) {
-      // 主体名などは部分一致でも漏れる（「市町村」と「市町村長」、「都道府県」と「当該都道府県内」）
-      if (restNo.includes(ans)) out.push(`答え「${ans}」が文中にもある`);
-    }
-    // 「N期／N回」は、列挙された項目を数えれば答えが出る
-    const cm = ans.match(/^(\d+)(期|回)$/);
-    if (cm) {
-      for (const m of restNo.matchAll(/(?:[^、。]{1,8}、)+[^、。]{1,8}?及び[^、。の]{1,8}/g)) {
-        // 「児童手当は、毎年2月、4月…及び12月」の先頭の「児童手当は」のような別物を数えないよう、
-        // 末尾の項目と同じ字で終わる項目だけを、後ろから数える
-        const items = m[0].split(/、|及び/);
-        const tail = items[items.length - 1].slice(-1);
-        let n = 0;
-        for (let j = items.length - 1; j >= 0 && items[j].endsWith(tail); j -= 1) n += 1;
-        if (n === Number(cm[1])) out.push(`「${ans}」は列挙（${m[0]}）を数えれば分かる`);
-      }
-    }
+  const ans = gs[i][1].split('|')[0];
+  let k = 0;
+  const rest = text.replace(/【(.+?)】/g, (mm, x) => {
+    const n = k++;
+    return n === i ? '□' : filled.includes(n) ? x.split('|')[0] : '■';
   });
+  const after = rest.slice(rest.indexOf('□') + 1);
+  const restNo = rest.replace('□', '');
+  if (/^\d+$/.test(ans)) {
+    // 数字だけの答えは、直後の単位とあわせて文中に再登場したら漏れ（「65歳以上」と「65歳未満」）
+    const unit = (after.match(/^[^\d、。（(■]/) || [''])[0];
+    if (unit && restNo.includes(ans + unit)) out.push(`答え「${ans}${unit}」が文中にもある`);
+  } else if (ans.length >= 2) {
+    // 主体名などは部分一致でも漏れる（「市町村」と「市町村長」、「都道府県」と「当該都道府県内」）
+    if (restNo.includes(ans)) out.push(`答え「${ans}」が文中にもある`);
+  }
+  // 「N期／N回」は、列挙された項目を数えれば答えが出る
+  const cm = ans.match(/^(\d+)(期|回)$/);
+  if (cm) {
+    for (const m of restNo.matchAll(/(?:[^、。]{1,8}、)+[^、。]{1,8}?及び[^、。の]{1,8}/g)) {
+      // 「児童手当は、毎年2月、4月…及び12月」の先頭の「児童手当は」のような別物を数えないよう、
+      // 末尾の項目と同じ字で終わる項目だけを、後ろから数える
+      const items = m[0].split(/、|及び/);
+      const tail = items[items.length - 1].slice(-1);
+      let n = 0;
+      for (let j = items.length - 1; j >= 0 && items[j].endsWith(tail); j -= 1) n += 1;
+      if (n === Number(cm[1])) out.push(`「${ans}」は列挙（${m[0]}）を数えれば分かる`);
+    }
+  }
+  return out;
+}
+function senLeaks(text, ng) {
+  const out = [];
+  const n = [...text.matchAll(/【(.+?)】/g)].length;
+  const hint = (ng && ng.hint) || [];
+  for (let i = 0; i < n; i += 1) {
+    const base = leakMsgs(text, i, []);
+    for (const m of base) out.push(`穴${i}: ${m}（本文から）`);
+    if (base.length) continue;
+    for (let j = 0; j < n; j += 1) {
+      if (j === i) continue;
+      const ms = leakMsgs(text, i, [j]);
+      if (!ms.length) continue;
+      if (hint.some(([a, b]) => a === i && b === j)) continue;
+      for (const m of ms) out.push(`穴${i}: ${m}（穴${j}の正解から。一緒に空けるなら ng.hint に [${i},${j}] を登録する）`);
+    }
+  }
   return out;
 }
 
 for (const q of Q) {
   if (q.t !== 'sen') continue;
-  for (const msg of senLeaks(q.text)) errs.push(`${q.id} の空欄の答えが文中から分かる: ${msg}`);
+  for (const msg of senLeaks(q.text, q.ng)) errs.push(`${q.id} の空欄の答えが文中から分かる: ${msg}`);
+  const n = [...q.text.matchAll(/【(.+?)】/g)].length;
+  if (n > 5) errs.push(`${q.id} の穴が${n}個ある（1つの文は5つまで）`);
+  for (const c of [...((q.ng && q.ng.both) || []), ...((q.ng && q.ng.hint) || [])]) {
+    if (!Array.isArray(c) || c.some((x) => !Number.isInteger(x) || x < 0 || x >= n)) errs.push(`${q.id} の ng に範囲外の穴の番号がある`);
+  }
 }
 
 // 受動態で義務や権限を問うのに、誰からの求めかが書かれていないと答えようがない。
