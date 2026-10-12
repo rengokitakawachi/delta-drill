@@ -237,6 +237,22 @@ body.incard header{display:none}
   .selfrate button{padding:7px 4px}
   .next{margin-top:9px;padding:12px}
 }
+/* iPad は横幅にも縦にも余裕があるので、問題文と解説の文字を大きくする（2026-10-12） */
+@media (min-width:744px){
+  .qtext,#card.done .qtext{font-size:24px}
+  .chbtns button{font-size:20px} .chbtns .blankans{font-size:21px}
+  .verdict{font-size:22px} .verdict .vca{font-size:19px}
+  .exp{font-size:19px}
+  .flip{font-size:16px}
+  .detail{font-size:17px}
+  .score{font-size:15px}
+  .chips button{font-size:19px}
+  .spotres{font-size:16px}
+  .reflink{font-size:15px}
+  .rec{font-size:16px}
+  .lawbar{font-size:19px}
+  .meta{font-size:15px}
+}
 </style>
 <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-auth-compat.js"></script>
@@ -401,7 +417,7 @@ const Q = [{"t": "ox", "ch": 1, "law": "社会保障・統計", "cat": "社会�
 /* 版スタンプ。VER は「この行を伏せたファイル内容」の sha256 先頭8桁で、
    npm test（scripts/version-stamp.mjs）が一致を強制する。
    内容を変えれば必ず変わるので、画面の値を見れば新旧を判別できる。 */
-const VER='4c61df9f';
+const VER='51651ceb';
 const KEY='dd_shaichi_ch12_v1';
 const LV=['未学習','要復習','不安あり','覚えた','完璧'];
 const LVC=['#64748b','#ef4444','#eab308','#22c55e','#3b82f6'];
