@@ -204,8 +204,9 @@ body.incard header{display:none}
 .spot.spotted .lb,.spot.spotted .chips,.spot.spotted .skip{display:none}
 .spot.spotted{padding:6px 10px;margin-top:6px}
 .spot.spotted .spotres{margin-top:0}
-/* iPad（幅744px以上）は縦に余裕があるので、詰めた余白を少し戻して読みやすくする（2026-10-12） */
-@media (min-width:744px){
+/* iPad 縦向きは縦に余裕があるので、詰めた余白を戻して読みやすくする（2026-10-12）。
+   横向きは高さが限られるので、下の中間の値にする */
+@media (min-width:744px) and (orientation:portrait){
   #card.done .qtext{margin:4px 0 14px;line-height:1.8}
   #card.done .lawbar{padding:9px 12px;margin:0 0 10px}
   #card.done .meta{margin-bottom:8px}
@@ -221,6 +222,20 @@ body.incard header{display:none}
   .selfrate{margin-top:12px}
   .selfrate button{padding:10px 4px}
   .next{margin-top:14px;padding:15px}
+}
+@media (min-width:744px) and (orientation:landscape){
+  #card.done .qtext{margin:3px 0 9px;line-height:1.7}
+  #card.done .lawbar{padding:7px 12px;margin:0 0 8px}
+  .verdict{padding:8px 14px;margin-bottom:8px}
+  .exp{padding:11px 14px;line-height:1.65}
+  .flip{margin:0 0 7px;padding:6px 10px}
+  .detail{margin-top:7px;padding-top:7px;line-height:1.65}
+  .score{margin-top:7px;padding-top:7px}
+  .reflink{margin-top:7px}
+  .rec{margin-top:8px;padding:7px 10px}
+  .selfrate{margin-top:8px}
+  .selfrate button{padding:7px 4px}
+  .next{margin-top:9px;padding:12px}
 }
 </style>
 <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-app-compat.js"></script>
@@ -386,7 +401,7 @@ const Q = [{"t": "ox", "ch": 1, "law": "社会保障・統計", "cat": "社会�
 /* 版スタンプ。VER は「この行を伏せたファイル内容」の sha256 先頭8桁で、
    npm test（scripts/version-stamp.mjs）が一致を強制する。
    内容を変えれば必ず変わるので、画面の値を見れば新旧を判別できる。 */
-const VER='41165961';
+const VER='4c61df9f';
 const KEY='dd_shaichi_ch12_v1';
 const LV=['未学習','要復習','不安あり','覚えた','完璧'];
 const LVC=['#64748b','#ef4444','#eab308','#22c55e','#3b82f6'];
