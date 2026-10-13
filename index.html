@@ -389,7 +389,9 @@ function genCode(){ const c='sr-'+Math.random().toString(36).slice(2,8)+Math.ran
 
 /* ===== Obsidian 連携（参照ページ → 該当ノートのページ見出しへ） ===== */
 function obsVault(){ try{return localStorage.getItem('obsidian_vault')||'Vault';}catch(e){return 'Vault';} }
-function obsFolder(){ try{return localStorage.getItem('obsidian_folder')||'社労士';}catch(e){return '社労士';} }
+// テキストの置き場所（2026-10-13〜）。保管庫の sharoshi/2026/ に 2026年版がある。以前の既定「社労士」を設定したままの端末も読み替える
+const OBS_DEFAULT_FOLDER='sharoshi/2026';
+function obsFolder(){ try{const v=localStorage.getItem('obsidian_folder')||''; return (v===''||v==='社労士')?OBS_DEFAULT_FOLDER:v;}catch(e){return OBS_DEFAULT_FOLDER;} }
 function obsMode(){ try{return localStorage.getItem('obsidian_mode')||'adv';}catch(e){return 'adv';} } /* adv=一発ジャンプ / search=検索 */
 function setObsConfig(v,f){ try{localStorage.setItem('obsidian_vault',(v||'').trim()); localStorage.setItem('obsidian_folder',(f||'').trim().replace(/^\/+|\/+$/g,''));}catch(e){} if(view==='home')renderHome(); }
 function setObsMode(m){ try{localStorage.setItem('obsidian_mode',m);}catch(e){} if(view==='home')renderHome(); }
