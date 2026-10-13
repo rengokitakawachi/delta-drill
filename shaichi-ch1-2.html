@@ -433,7 +433,7 @@ const Q = [{"t": "ox", "ch": 1, "law": "社会保障・統計", "cat": "社会�
 /* 版スタンプ。VER は「この行を伏せたファイル内容」の sha256 先頭8桁で、
    npm test（scripts/version-stamp.mjs）が一致を強制する。
    内容を変えれば必ず変わるので、画面の値を見れば新旧を判別できる。 */
-const VER='f547a8f2';
+const VER='82baae83';
 const KEY='dd_shaichi_ch12_v1';
 const LV=['未学習','要復習','不安あり','覚えた','完璧'];
 const LVC=['#64748b','#ef4444','#eab308','#22c55e','#3b82f6'];
@@ -495,7 +495,10 @@ function stopTimer(){
 /* ===== Obsidian 連携（総合版と同じ localStorage キーを共有） ===== */
 const OBS_LABEL='⑩基礎講座_社会保険に関する一般常識';
 function obsVault(){try{return localStorage.getItem('obsidian_vault')||'';}catch(e){return '';}}
-function obsFolder(){try{return localStorage.getItem('obsidian_folder')||'';}catch(e){return '';}}
+/* テキストの置き場所（2026-10-13〜）。保管庫の sharoshi/2026/ に、教材の 2026年版がある（ページの区切りが見出しなので、そのページへ飛べる）。
+   以前の既定（空・「社労士」）を設定したままの端末も、新しい置き場所を開くように読み替える。 */
+const OBS_DEFAULT_FOLDER='sharoshi/2026';
+function obsFolder(){try{const v=localStorage.getItem('obsidian_folder')||''; return (v===''||v==='社労士')?OBS_DEFAULT_FOLDER:v;}catch(e){return OBS_DEFAULT_FOLDER;}}
 function obsMode(){try{return localStorage.getItem('obsidian_mode')||'adv';}catch(e){return 'adv';}}
 function saveObs(){
   try{localStorage.setItem('obsidian_vault',document.getElementById('ov').value.trim());
