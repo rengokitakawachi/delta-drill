@@ -1,6 +1,10 @@
 # CLAUDE.md — delta-drill
 
 社労士学習クイズ。**正式な学習アプリ（delta drill）は `shaichi-ch1-2.html`**（直接編集可・2026-10-11 User 決定）で、トップ URL `/` はここへ転送する。
+**①〜⑩の冊を1つのアプリで切り替える**（2026-10-15 木下氏決定）。冊ごとの違い（版・記録の保存先・Firebase の置き場所）は本体の `BOOKS` 表、問題は冊ごとの **`data/q<冊番号>.json`**（`{chs: 章の一覧, q: 問題}`・1問1行）。
+- 名札（id）：①〜⑨は `01-o001` の形。⑩は旧来の `o060` のまま（2027年版に切り替えるときに付け直し、Firebase も `shaichi_ch12` → `drill_10` に移す）。
+- 記録：手元は冊ごとのキー（⑩ `dd_shaichi_ch12_v1`、①〜 `dd_drill_<冊>_v1`）、Firebase は同じ doc の冊ごとのフィールド（⑩ `shaichi_ch12`、①〜 `drill_<冊>`）。今日の数・目標40問は全冊の合計で見せる。
+- 冊を足すとき：`data/q<冊>.json` を置き、`BOOKS` の該当行に `ready:true` を付ける。
 総合版の **index.html はビルド生成物**（正本は `build/`）で、**利用終了**（残しているが更新しない）。
 配信URL: https://rengokitakawachi.github.io/delta-drill/ ／ 学習実績は Firebase 経由で ai-work-os の delta と連携（本リポは Firebase 設定を変えない）。
 
@@ -17,6 +21,7 @@
 
 ## 開発の約束
 
+- アプリ（`shaichi-ch1-2.html`）か `data/q*.json` を直したら `npm run version:fix` → `npm test`（版スタンプは本体と問題のファイルを合わせて計算する）。
 - 配信HTML（index.html）を直接編集しない。`build/data/*.json`・`build/app2_*.html`・`build/qbank.js` を編集 → `npm run build`。
 - `detail_<id>.json` は `gen_<id>.json` と**同順・同長**（不一致だと解説が捨てられる）。
 - `weights_<id>.json` のキーは gen の `law` 値と**完全一致**させる（qw() の部分一致依存で誤マッチした実績あり）。

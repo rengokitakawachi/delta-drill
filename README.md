@@ -8,6 +8,7 @@
 - このリポジトリの root を GitHub Pages で配信する（`.nojekyll` 同梱）。
 - 公開URL（例）: `https://rengokitakawachi.github.io/delta-drill/`
 - **正式な学習アプリ（delta drill）は `shaichi-ch1-2.html`**（2026-10-11 User 決定）。トップ URL `/` はここへ転送する（`vercel.json` の redirects）。
+- アプリは①〜⑩の冊を切り替えて使う（2026-10-15〜）。問題は冊ごとの `data/q<冊番号>.json`。
 - `index.html`（総合版・1803問）は**利用終了**。ファイルとビルドは残しているが、今後は更新しない。
 
 ### Pages 有効化手順
@@ -19,7 +20,9 @@
 
 | パス | 内容 |
 |---|---|
-| `index.html` | 学習クイズ本体（配信されるトップ。旧「社労士問題集.html」と同一内容） |
+| `shaichi-ch1-2.html` | 学習アプリ delta drill（冊を切り替える本体） |
+| `data/q<冊番号>.json` | アプリの問題（冊ごと） |
+| `index.html` | 旧総合版（利用終了） |
 | `roudou-ippan.html` | 労働一般の確認問題（旧「労働一般_確認問題.html」） |
 | `ikukyu.html` | 育休の確認問題（旧「育休確認問題.html」） |
 | `build/` | クイズを再生成するビルド一式（正本） |

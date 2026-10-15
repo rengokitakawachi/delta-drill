@@ -9,7 +9,32 @@ import fs from 'node:fs';
 
 const FILE = 'shaichi-ch1-2.html';
 const html = fs.readFileSync(FILE, 'utf8');
-const Q = JSON.parse(html.match(/const Q = (\[[\s\S]*?\]);\n/)[1]);
+
+// 問題は冊ごとの data/q<冊番号>.json（2026-10-15〜）。全冊をまとめて検査する。
+// 名札（id）は全冊で重ならないこと。①〜⑨は「冊番号-」で始めること（⑩は旧来の名札のまま。2027年版で付け直す）。
+// 問題番号（no）は「冊番号-3桁」。
+const DATA = 'data';
+const books = fs.readdirSync(DATA).filter((f) => /^q\d{2}\.json$/.test(f)).sort();
+const Q = [];
+const errs = [];
+for (const f of books) {
+  const bno = f.slice(1, 3);
+  const d = JSON.parse(fs.readFileSync(`${DATA}/${f}`, 'utf8'));
+  if (!Array.isArray(d.q) || !Array.isArray(d.chs)) { errs.push(`${f} に q（問題）か chs（章の一覧）が無い`); continue; }
+  const chs = new Set(d.chs.map((c) => c.n));
+  for (const q of d.q) {
+    if (bno !== '10' && !String(q.id).startsWith(`${bno}-`)) errs.push(`${f} の ${q.id} の名札に冊番号「${bno}-」が無い`);
+    if (!new RegExp(`^${bno}-\\d{3}$`).test(q.no || '')) errs.push(`${f} の ${q.id} の問題番号「${q.no}」が「${bno}-3桁」でない`);
+    if (!chs.has(q.ch)) errs.push(`${f} の ${q.id} の章 ${q.ch} が章の一覧に無い`);
+    Q.push(q);
+  }
+}
+const seenId = new Set(), seenNo = new Set();
+for (const q of Q) {
+  if (seenId.has(q.id)) errs.push(`名札 ${q.id} が重なっている`);
+  if (seenNo.has(q.no)) errs.push(`問題番号 ${q.no} が重なっている`);
+  seenId.add(q.id); seenNo.add(q.no);
+}
 
 // 誤り箇所タップは本体の spotChunks が節に切れたときだけ出る。
 // 切れないと機能が黙って消えるので、本体からそのまま取り出して全問で確かめる。
@@ -35,8 +60,6 @@ const EXP_QUOTE_SKIP = new Set(['o150']);
 // o044「その損害額の全額について」→「その給付の価額の限度で」、
 // o149「実施に支障がある場合であっても」→「実施に支障がない場合には」。
 const PARTICLE_SKIP = new Set(['o044', 'o149']);
-
-const errs = [];
 
 function dup(text) {
   const out = [];
@@ -220,4 +243,4 @@ if (errs.length) {
   errs.forEach((e) => console.error('  ' + e));
   process.exit(1);
 }
-console.log(`PASS check-questions: ${Q.length}問（○×${Q.filter((q) => q.t === 'ox').length}・選択式${Q.filter((q) => q.t === 'sen').length}）`);
+console.log(`PASS check-questions: ${books.length}冊・${Q.length}問（○×${Q.filter((q) => q.t === 'ox').length}・選択式${Q.filter((q) => q.t === 'sen').length}）`);
