@@ -184,6 +184,7 @@ border-radius:9px;padding:10px;font-size:12px;font-weight:700;cursor:pointer}
 .verdict{display:flex;align-items:center;justify-content:space-between;gap:8px;font-size:15px;padding:6px 10px;margin-bottom:6px;text-align:left}
 .verdict .vca{font-size:13px;font-weight:600;color:var(--txt)}
 .verdict .vca b{color:var(--gold)}
+.verdict .vca small{font-size:.8em;font-weight:500;color:var(--sub)}
 .exp{padding:8px 10px;line-height:1.55}
 .flip{margin:0 0 5px;padding:5px 8px;line-height:1.5}
 .detail{margin-top:5px;padding-top:5px;line-height:1.55}
@@ -433,7 +434,7 @@ const Q = [{"t": "ox", "ch": 1, "law": "社会保障・統計", "cat": "社会�
 /* 版スタンプ。VER は「この行を伏せたファイル内容」の sha256 先頭8桁で、
    npm test（scripts/version-stamp.mjs）が一致を強制する。
    内容を変えれば必ず変わるので、画面の値を見れば新旧を判別できる。 */
-const VER='82baae83';
+const VER='4a2be001';
 const KEY='dd_shaichi_ch12_v1';
 const LV=['未学習','要復習','不安あり','覚えた','完璧'];
 const LVC=['#64748b','#ef4444','#eab308','#22c55e','#3b82f6'];
@@ -1131,8 +1132,9 @@ function spotPick(k){
   // 誤り箇所を外したら、×が当たっていても不正解として記録し直す（2026-10-12 木下氏）。
   // 理由を取り違えたまま×が当たっただけで、覚えたことにはならないため。
   if(!ok) spotMiss();
-  d.innerHTML=(ok?'⭕ そこです。':'外れ。この設問が問うているのは色の付いた箇所。')+`正しくは <b>${cur.r||''}</b>`
-    +(ok?'':'<br>誤り箇所を外したので、記録は不正解（要復習）にしました。');
+  d.innerHTML=ok?'⭕ そこです。':'外れ。この設問が問うているのは色の付いた箇所。';
+  const vs=document.getElementById('vspot');
+  if(vs) vs.innerHTML=ok?'誤り箇所 ⭕':'誤り箇所 ❌<small>（記録は不正解）</small>';
   document.getElementById('spot').appendChild(d);
   setTimeout(revealFb,ok?450:900);
 }
@@ -1172,15 +1174,18 @@ function scoreLine(q){
   if(c.k) parts.push('改正点のため点数によらず出題');
   return `<div class="score">重要度 <b>${t}点</b>　${parts.join('／')}</div>`;
 }
-function feedback(ok,correctLabel,unk){
+function feedback(ok,correctLabel){
   answered=true;
   document.getElementById('card').classList.add('done');
   document.getElementById('oxbtns').style.display='none';
   document.getElementById('chbtns').style.display='none';
   const v=document.getElementById('verdict');
   v.className='verdict '+(ok?'ok':'ng');
-  v.innerHTML=(ok?'⭕ 正解':unk?'🤔 わからない':'❌ 不正解')+'<span class="vca">正解：<b id="ca"></b></span>';
-  document.getElementById('ca').textContent=correctLabel;
+  /* 左は答えの正否だけ（わからないも不正解と出す）。右は、○×では誤り箇所の正否（問うたときだけ・答えた後に spotPick が入れる）、
+     選択式では穴の正しい語（2026-10-14 木下氏）。○×の右に正しい答えをくり返さない（左と同じことの言い直しになるため） */
+  v.innerHTML=(ok?'⭕ 正解':'❌ 不正解')
+    +(cur.t==='ox'?'<span class="vca" id="vspot"></span>':'<span class="vca">正解：<b id="ca"></b></span>');
+  if(cur.t!=='ox') document.getElementById('ca').textContent=correctLabel;
   const head = (cur.t==='ox'&&cur.qx)
     ? (cur._ans ? `<div class="flip ok">この版は<b>正しい</b>（「${cur.r}」）</div>`
                 : `<div class="flip ng">「${cur.w}」が誤り。正しくは<b>${cur.r}</b></div>`)
@@ -1212,9 +1217,9 @@ function feedback(ok,correctLabel,unk){
   document.getElementById('selfrate').style.display='block';
   document.getElementById('nextBtn').textContent=(idx===pool.length-1)?'ホームへ →':'次の問題 →';
 }
-function ans(v){ if(answered)return; feedback(v===cur._ans, cur._ans?'⚪︎（正しい）':'✕（誤り）'); }
+function ans(v){ if(answered)return; feedback(v===cur._ans); }
 /* わからない：不正解と同じく要復習として記録し、誤り箇所の問いは挟まずに解説を出す */
-function ansUnknown(){ if(answered)return; feedback(false, cur._ans?'⚪︎（正しい）':'✕（誤り）', true); }
+function ansUnknown(){ if(answered)return; feedback(false); }
 const SEN_LB='ABCDE';
 /* 空ける穴を選ぶ（2026-10-13 木下氏と決定）。
    穴は1つの文に5つまで持てる。出題のたびに最大 SEN_MAX 個を、穴ごとの記録 bh で重みを付けて選ぶ。
