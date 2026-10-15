@@ -41,7 +41,9 @@ const total = files.reduce((s, f) => s + f.size, 0);
 
 // ---- 領域一覧（役割は静的定義・未知の領域は自動で「—」） ----
 const AREAS = {
-  'index.html':        { role: 'メインクイズ（配信物）', warn: '⛔ 生成物。手編集禁止・全文Read禁止。build/ を編集→ npm run build' },
+  'shaichi-ch1-2.html':{ role: '正式な学習アプリ delta drill（①〜⑩の冊を切り替える本体。問題は data/）', warn: '直接編集可。編集後 npm run version:fix' },
+  'data':              { role: 'アプリの問題 q<冊番号>.json（{chs, q}。1問1行）', warn: '△ 大きい。Grep で問題番号・id を探して部分読み' },
+  'index.html':        { role: '旧総合版クイズ（利用終了・配信物）', warn: '⛔ 生成物。手編集禁止・全文Read禁止。build/ を編集→ npm run build' },
   'roudou-ippan.html': { role: '労働一般 確認問題（単体配信物）', warn: '△ 大きい。部分読み推奨' },
   'ikukyu.html':       { role: '育休 確認問題（単体配信物）', warn: '' },
   'build':             { role: 'ビルド正本(SSOT): head/tail + data/*.json → index.html', warn: 'ここが編集対象' },

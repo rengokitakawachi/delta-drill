@@ -3,7 +3,7 @@
 > 自動生成: `npm run map`（scripts/repo-map.mjs）。**手編集禁止**。
 > ファイルの追加/削除/大幅なサイズ変化の後は手動で再生成してコミットすること（自動更新はされない）。
 
-全体: 85 ファイル / 約 4378 KB
+全体: 95 ファイル / 約 5098 KB
 
 ## 領域一覧
 
@@ -11,28 +11,34 @@
 |---|--:|--:|---|---|
 | .nojekyll | 1 | 0 | GitHub Pages の Jekyll 処理抑止（空ファイル） | Read不要 |
 | analysis/ | 11 | 67 | 過去問分析ノート（Obsidian, 10科目+README） |  |
-| build/ | 65 | 2309 | ビルド正本(SSOT): head/tail + data/*.json → index.html | ここが編集対象 |
+| build/ | 65 | 2312 | ビルド正本(SSOT): head/tail + data/*.json → index.html | ここが編集対象 |
 | build/data/ | 60 | 2158 | 問題データ gen_/detail_/sentaku_/weights_<科目id>.json | △ 50KB超多数。必要な科目のみ部分読み |
-| CLAUDE.md | 1 | 3 | AIエージェント向け規約（トークン節約規約を含む） |  |
+| CLAUDE.md | 1 | 4 | AIエージェント向け規約（トークン節約規約を含む） |  |
+| data | 1 | 597 | アプリの問題 q<冊番号>.json（{chs, q}。1問1行） | △ 大きい。Grep で問題番号・id を探して部分読み |
 | ikukyu.html | 1 | 15 | 育休 確認問題（単体配信物） |  |
-| index.html | 1 | 1875 | メインクイズ（配信物） | ⛔ 生成物。手編集禁止・全文Read禁止。build/ を編集→ npm run build |
-| package.json | 1 | 0 | npm scripts 定義（依存ゼロ） |  |
-| README.md | 1 | 2 | リポ説明（配信URL・Pages手順） |  |
+| index.html | 1 | 1878 | 旧総合版クイズ（利用終了・配信物） | ⛔ 生成物。手編集禁止・全文Read禁止。build/ を編集→ npm run build |
+| notes/ | 4 | 8 | —（未登録領域。役割を AREAS に追記推奨） |  |
+| package.json | 1 | 1 | npm scripts 定義（依存ゼロ） |  |
+| README.md | 1 | 3 | リポ説明（配信URL・Pages手順） |  |
 | roudou-ippan.html | 1 | 96 | 労働一般 確認問題（単体配信物） | △ 大きい。部分読み推奨 |
-| scripts/ | 2 | 10 | AI/開発支援スクリプト（地図生成・ビルド検証） |  |
+| scripts/ | 5 | 27 | AI/開発支援スクリプト（地図生成・ビルド検証） |  |
+| shaichi-ch1-2.html | 1 | 90 | 正式な学習アプリ delta drill（①〜⑩の冊を切り替える本体。問題は data/） | 直接編集可。編集後 npm run version:fix |
+| vercel.json | 1 | 0 | —（未登録領域。役割を AREAS に追記推奨） |  |
 | docs/ | 1 | 0 | 生成ドキュメント（この地図） | ⛔ REPO_MAP.md は生成物。npm run map で再生成 |
 
 ## ⛔ 100KB超 — 全文Read禁止
 
 | KB | ファイル | 扱い方 |
 |--:|---|---|
-| 1875 | index.html | 生成物。読む必要なし（build/ が正本）。どうしても中身が要る時: Grep -n で行番号特定 → Read offset/limit で部分読み |
+| 1878 | index.html | 生成物。読む必要なし（build/ が正本）。どうしても中身が要る時: Grep -n で行番号特定 → Read offset/limit で部分読み |
+| 597 | data/q10.json | どうしても中身が要る時: Grep -n で行番号特定 → Read offset/limit で部分読み |
 
 ※ index.html はデータが少数の超長行に凝縮されている。limit=1 でも数十万文字を引き込むため、**Grep も head_limit 必須**。
 
 ## △ 50〜100KB — 全文Read非推奨（部分読み推奨）
 
 - 96KB roudou-ippan.html
+- 90KB shaichi-ch1-2.html
 - 87KB build/data/detail_roui.json
 - 79KB build/data/detail_kounen.json
 - 78KB build/data/gen_roui.json
@@ -49,10 +55,10 @@
 - 61KB build/data/gen_rousai.json
 - 58KB build/data/gen_choushu.json
 - 55KB build/data/detail_koyou.json
+- 53KB build/app2_tail.html
 - 53KB build/data/detail_ranzen.json
 - 52KB build/data/detail_rousai.json
 - 51KB build/data/detail_kokunen.json
-- 51KB build/app2_tail.html
 - 50KB build/data/gen_oudan.json
 
 ## 🗑 build/data の未参照ファイル（ビルドに読まれない。探索・Read不要）
