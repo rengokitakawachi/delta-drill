@@ -54,7 +54,14 @@ padding:13px 14px;text-align:left;font-size:14px;font-weight:700;cursor:pointer}
 .meta{display:flex;justify-content:space-between;font-size:11px;color:var(--sub);margin-bottom:8px}
 .tag{background:var(--card2);border-radius:999px;padding:3px 9px}
 .lawbar{background:linear-gradient(135deg,#1d4ed8,#0ea5e9);border-radius:9px;padding:8px 11px;
-margin:2px 0 10px;font-size:14px;font-weight:800;letter-spacing:.3px;color:#fff;text-align:center}
+margin:2px 0 10px;font-size:14px;font-weight:800;letter-spacing:.3px;color:#fff;text-align:center;
+  display:flex;align-items:center;gap:8px}
+.lawbar #lawname{flex:1}
+/* 出題中も今日の目標の達成状況を見せる（2026-10-16 木下氏）。行を増やさず、帯の右端の数とカード上縁の線で示す */
+.lawbar #qtoday{flex-shrink:0;font-size:11px;font-weight:700;background:rgba(255,255,255,.22);border-radius:999px;padding:2px 8px;font-variant-numeric:tabular-nums}
+.card{position:relative;overflow:hidden}
+#qgoalbar{position:absolute;left:0;top:0;height:4px;width:0;background:#0ea5e9;transition:width .3s}
+#qgoalbar.met{background:#22c55e}
 .qtext{font-size:15px;line-height:1.75;margin:6px 0 14px}
 .qtext b{color:var(--gold)}
 .btns{display:flex;gap:10px}
@@ -387,9 +394,10 @@ body.incard header{display:none}
 </div>
 
 <div class="card" id="card">
+  <div id="qgoalbar"></div>
   <div class="meta"><span class="tag" id="tag"></span>
     <span class="metar"><span id="cnt"></span><span class="qtime" id="qtime">0秒</span><button class="quit" onclick="quit()">✕ 中断</button></span></div>
-  <div class="lawbar" id="lawbar"></div>
+  <div class="lawbar" id="lawbar"><span id="lawname"></span><span id="qtoday"></span></div>
   <div class="qtext" id="qtext"></div>
   <div class="btns" id="oxbtns">
     <button class="bmaru" onclick="ans(true)">⚪︎</button>
@@ -462,7 +470,7 @@ let Q=[], CHS=[];                       // 問題と章の一覧。loadBook() �
 /* 版スタンプ。VER は「この行を伏せたファイル内容」の sha256 先頭8桁で、
    npm test（scripts/version-stamp.mjs）が一致を強制する。
    内容を変えれば必ず変わるので、画面の値を見れば新旧を判別できる。 */
-const VER='0a6ef80c';
+const VER='f5fff6fb';
 const KEY=BOOK.key;                    // 手元の記録の保存先（冊ごと）
 const LV=['未学習','要復習','不安あり','覚えた','完璧'];
 const LVC=['#64748b','#ef4444','#eab308','#22c55e','#3b82f6'];
@@ -1093,12 +1101,18 @@ function draw(q){
   return Math.random()<0.5 ? {text:q.q, ans:true, flipped:false}
                            : {text:q.qx, ans:false, flipped:true};
 }
+function showQToday(){   // 出題中の「今日 n/40」とカード上縁の線（全冊の合計）
+  const n=todayAll().n, met=n>=GOAL;
+  document.getElementById('qtoday').textContent=met?`今日 ${n}問 達成`:`今日 ${n}/${GOAL}`;
+  const g=document.getElementById('qgoalbar');
+  g.style.width=Math.min(100,n/GOAL*100)+'%'; g.classList.toggle('met',met);
+}
 function load(){
   cur=pool[idx];answered=false; if(cur) cur._bhNew=null;
   document.body.classList.add('incard');   // 出題中はページ上部の見出しを隠す（中断からの再開でも効くよう load で付ける）
   document.getElementById('card').classList.remove('done');
   const d=draw(cur); cur._text=d.text; cur._ans=d.ans;
-  document.getElementById('lawbar').textContent=cur.law;
+  document.getElementById('lawname').textContent=cur.law; showQToday();
   document.getElementById('tag').textContent=`${cur.no?cur.no+'　':''}${BOOK.mark}${BOOK.tag}・p.${cur.page}`;
   document.getElementById('cnt').textContent=`${idx+1} / ${pool.length}　${LV[box(cur.id)]}`;
   document.getElementById('fb').style.display='none';
@@ -1416,6 +1430,7 @@ function apply(b,recount,sec,ok){
   // 当日分を日別ログにも書く。日付を跨いでアプリを開かなくても記録が残る
   S.daily[S.day]=S.n; S.log[S.day]=S.t;
   saveS();
+  if(!recount) showQToday();
 }
 function showRec(sec){
   const b=box(cur.id);
