@@ -470,7 +470,7 @@ let Q=[], CHS=[];                       // 問題と章の一覧。loadBook() �
 /* 版スタンプ。VER は「この行を伏せたファイル内容」の sha256 先頭8桁で、
    npm test（scripts/version-stamp.mjs）が一致を強制する。
    内容を変えれば必ず変わるので、画面の値を見れば新旧を判別できる。 */
-const VER='a630e53f';
+const VER='46941145';
 const KEY=BOOK.key;                    // 手元の記録の保存先（冊ごと）
 const LV=['未学習','要復習','不安あり','覚えた','完璧'];
 const LVC=['#64748b','#ef4444','#eab308','#22c55e','#3b82f6'];
@@ -498,13 +498,37 @@ let S=loadS();
    GitHub Actions の delta-study-sync がこれを読んで app history log に書き出す。 */
 if(!S.daily||typeof S.daily!=='object') S.daily={};
 if(!S.log||typeof S.log!=='object') S.log={};
-if(S.day && S.day!==today() && S.n>0){   // 日付が変わる前に、その日の値を確定させる
-  S.daily[S.day]=Math.max(S.daily[S.day]||0,S.n);
-  S.log[S.day]=Math.max(S.log[S.day]||0,S.t||0);
+/* 日付の切り替え。以前は開いたときだけ確かめていたため、前の日から開いたままの画面で
+   翌朝解くと、その分が前の日に足され、開き直すと今日が0問になった（2026-10-17 iPad）。
+   いまは開いたとき・答えるとき・画面に戻ったときに確かめる。 */
+function rollDay(){
+  if(S.day===today()) return false;
+  if(S.day && S.n>0){   // 日付が変わる前に、その日の値を確定させる
+    S.daily[S.day]=Math.max(S.daily[S.day]||0,S.n);
+    S.log[S.day]=Math.max(S.log[S.day]||0,S.t||0);
+  }
+  pruneLog(S.daily); pruneLog(S.log);
+  S.day=today(); S.n=0; S.t=0;
+  fixTodayN();
+  return true;
+}
+/* 今日の数を、問題ごとの答えた日（hd）から数え直し、少なければ引き上げる。
+   上の不具合で前の日に回った今朝の分を戻すため。今日更新した問題の hd のうち今日の日付の回を数える。
+   学習時間（秒）は問題ごとに持っていないので戻せない。 */
+function fixTodayN(){
+  const md=mmdd(), td=new Date().toDateString(); let c=0;
+  for(const id in S.p){
+    const r=S.p[id]; if(!r||!r.at||typeof r.hd!=='string') continue;
+    if(new Date(r.at).toDateString()!==td) continue;
+    for(let k=0;k<r.hd.length;k+=4) if(r.hd.slice(k,k+4)===md) c++;
+  }
+  if(c>S.n){ S.n=c; S.daily[S.day]=Math.max(S.daily[S.day]||0,c); return true; }
+  return false;
 }
 pruneLog(S.daily); pruneLog(S.log);
-if(S.day!==today()){S.day=today();S.n=0;S.t=0;saveS();}
 if(typeof S.t!=='number') S.t=0;
+if(rollDay()|fixTodayN()) saveS();
+document.addEventListener('visibilitychange',()=>{ if(document.visibilityState==='visible' && rollDay()){ saveS(); if(typeof renderHome==='function' && document.getElementById('home').style.display!=='none') renderHome(); } });
 
 /* ===== 時間計測 ===== */
 const MAX_Q_SEC=300;                 // 放置対策。1問あたりの上限
@@ -869,7 +893,7 @@ function connectSync(){
       const d=(remoteAll && remoteAll[FIELD]) || null;
       remoteN=nP(d&&d.p);
       const wasFirst=!firstSnap;
-      const changed = d ? mergeRemote(d) : false;
+      const changed = (d ? mergeRemote(d) : false) | fixTodayN();
       firstSnap=true;
       snapN++;
       // 記録するのは初回と、実際に取り込みが起きたときだけ。毎回書くとログが埋まる
@@ -1421,6 +1445,7 @@ function nextBox(b,id){
 }
 
 function apply(b,recount,sec,ok){
+  if(!recount && rollDay()) saveS();
   if(!recount) lg('ans',{id:cur.id,b:b,p:Object.keys(S.p).length+1,n:S.n+1,ok:ok?1:0,...(cur.t==='ox'?{s:cur._ans?1:0}:{})});  // s: ○×問題で出した版（1=○の文 0=×の文）
   /* 履歴を積むのは実際に答えたときだけ。あとから定着度を付け直しても回数は増やさない。 */
   const h = recount ? hist(cur.id) : pushHist(cur.id,ok);
