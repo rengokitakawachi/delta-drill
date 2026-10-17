@@ -470,7 +470,7 @@ let Q=[], CHS=[];                       // 問題と章の一覧。loadBook() �
 /* 版スタンプ。VER は「この行を伏せたファイル内容」の sha256 先頭8桁で、
    npm test（scripts/version-stamp.mjs）が一致を強制する。
    内容を変えれば必ず変わるので、画面の値を見れば新旧を判別できる。 */
-const VER='52109dc3';
+const VER='789be112';
 const KEY=BOOK.key;                    // 手元の記録の保存先（冊ごと）
 const LV=['未学習','要復習','不安あり','覚えた','完璧'];
 const LVC=['#64748b','#ef4444','#eab308','#22c55e','#3b82f6'];
@@ -685,17 +685,18 @@ function toggleType(t){
 }
 function QA(){ return QS().filter(q=>typeOn(q.t)); }
 /* 毎日の出題（2026-10-12〜）は完璧を外す。完璧は「完璧の確認テスト」でだけ出し、間違えたら要復習に戻って毎日の出題に復帰する */
-/* 完璧の手前（覚えたで直近2回が続けて正解）は、前回から PERFECT_GAP 日あくまで出さない（2026-10-17 木下氏）。
-   早く出すと、正解しても日数が足りず完璧に上がらないうえ、前回の日付が新しくなって、いつまでも完璧にならない。 */
+/* 完璧の手前（覚えたで直近2回が続けて正解）は、前回から PERFECT_GAP 日あくまで、おまかせと復習優先には出さない（2026-10-17 木下氏）。
+   早く出すと、正解しても日数が足りず完璧に上がらないうえ、前回の日付が新しくなって、いつまでも完璧にならない。
+   章ごと・未出題優先・全問通しは、選んで解く出題なので外さない。 */
 function waitPerfect(id){
   if(box(id)!==3 || hist(id).slice(-2)!=='11') return false;
   const g=daysSince(id); return g!==null && g<PERFECT_GAP;
 }
-function QD(){ return QA().filter(q=>box(q.id)!==4 && !waitPerfect(q.id)); }
+function QD(){ return QA().filter(q=>box(q.id)!==4); }
 const PERFECT_CHECK=30;                        // 前回（完璧になった日・前回の確認）からこの日数以上たった完璧を「確認時期」とする（2026-10-12 木下氏）
 function perfectList(){ return QA().filter(q=>box(q.id)===4); }
 function perfectDue(){ return perfectList().filter(q=>{ const g=daysSince(q.id); return g===null || g>=PERFECT_CHECK; }); }
-function dueList(){return QD().filter(q=>box(q.id)>0&&due(q.id));}
+function dueList(){return QD().filter(q=>box(q.id)>0&&due(q.id)&&!waitPerfect(q.id));}   // ホームの復習の数と復習優先の出題で共通
 
 /* 今日の数は全冊の合計（2026-10-15 木下氏）。記録は冊ごとに持ち、ここで足す。
    ほかの冊の今日の数は、この端末の記録とクラウドの記録の大きい方を採る（端末をまたいで二重に数えない）。 */
@@ -1115,7 +1116,7 @@ function start(mode){
     const fresh=shuffle(A.filter(q=>box(q.id)===0));
     pool=fresh.concat(byPriority(A.filter(q=>box(q.id)>0))).slice(0,GOAL);
   }
-  else pool=byPriority(A.slice()).slice(0,GOAL);   // auto: 優先度順
+  else pool=byPriority(A.filter(q=>!waitPerfect(q.id))).slice(0,GOAL);   // auto: 優先度順（完璧の手前で7日たたない問題は除く）
   if(!pool.length){alert('対象の問題がありません');return;}
   idx=0;lg('start',{mode:mode,n:pool.length});
   document.getElementById('home').style.display='none';
