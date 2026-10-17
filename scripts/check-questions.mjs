@@ -22,7 +22,15 @@ for (const f of books) {
   const d = JSON.parse(fs.readFileSync(`${DATA}/${f}`, 'utf8'));
   if (!Array.isArray(d.q) || !Array.isArray(d.chs)) { errs.push(`${f} に q（問題）か chs（章の一覧）が無い`); continue; }
   const chs = new Set(d.chs.map((c) => c.n));
+  const yks = d.yks || {};
+  // 横断の比較：問題の yk は yks にあり、yks は {t, r:[[制度, 内容],…]} の形で、使われていない論点を置かない
+  for (const [k, v] of Object.entries(yks)) {
+    if (!v || typeof v.t !== 'string' || !Array.isArray(v.r) || !v.r.length || !v.r.every((x) => Array.isArray(x) && x.length === 2 && x.every((y) => typeof y === 'string' && y))) errs.push(`${f} の横断の比較「${k}」の形が正しくない`);
+    if (!d.q.some((q) => q.yk === k)) errs.push(`${f} の横断の比較「${k}」を使う問題が無い`);
+  }
   for (const q of d.q) {
+    if (q.yk && !yks[q.yk]) errs.push(`${f} の ${q.id} の横断の比較「${q.yk}」が yks に無い`);
+    if (q.yk && !(q.sc && q.sc.y)) errs.push(`${f} の ${q.id} に横断の比較があるのに横断の印（sc.y）が無い`);
     if (bno !== '10' && !String(q.id).startsWith(`${bno}-`)) errs.push(`${f} の ${q.id} の名札に冊番号「${bno}-」が無い`);
     if (!new RegExp(`^${bno}-\\d{3}$`).test(q.no || '')) errs.push(`${f} の ${q.id} の問題番号「${q.no}」が「${bno}-3桁」でない`);
     if (!chs.has(q.ch)) errs.push(`${f} の ${q.id} の章 ${q.ch} が章の一覧に無い`);

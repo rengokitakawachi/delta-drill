@@ -88,6 +88,12 @@ padding:12px;font-size:14px;text-align:left;cursor:pointer}
 .exp{background:#0b1220;border-left:3px solid var(--acc);border-radius:8px;padding:11px;font-size:13px;line-height:1.7}
 .exp b{color:var(--gold)}
 .detail{margin-top:8px;font-size:12px;line-height:1.7;color:var(--sub);border-top:1px dashed var(--line);padding-top:8px}
+/* 横断の比較（2026-10-17）。解説とは別の枠に、制度ごとに1行で並べる */
+.yk{margin-top:10px;border:1px solid rgba(251,191,36,.35);border-radius:8px;padding:8px 10px;background:rgba(251,191,36,.06);font-size:12px;line-height:1.65;color:var(--sub)}
+.yk .ykt{font-weight:800;color:var(--gold);margin-bottom:2px}
+.yk .ykr{padding:5px 0;border-top:1px dashed var(--line)}
+.yk .ykt+.ykr{border-top:none}
+.yk .ykr b{display:block;color:var(--txt);font-size:.95em}
 .selfrate{margin-top:12px}
 .selfrate .lb{font-size:11px;color:var(--sub);margin-bottom:6px}
 .selfrate .opts{display:flex;gap:6px}
@@ -169,7 +175,7 @@ padding-bottom:max(16px,env(safe-area-inset-bottom));padding-top:max(16px,env(sa
   .btns button{font-size:26px;padding:22px 0}
   .chbtns button{font-size:18px;padding:16px} .chbtns .blankans{font-size:19px}
   .verdict{font-size:21px;padding:12px}
-  .exp{font-size:16.5px;padding:15px} .detail{font-size:15px}
+  .exp{font-size:16.5px;padding:15px} .detail{font-size:15px} .yk{font-size:14.5px}
   .chips button{font-size:17px;padding:11px 14px}
   .rec{font-size:14.5px} .selfrate button{font-size:13.5px;padding:11px 4px} .selfrate button small{font-size:11px}
   .next{font-size:18px;padding:17px}
@@ -257,7 +263,7 @@ body.incard header{display:none}
   .verdict{font-size:22px} .verdict .vca{font-size:19px}
   .exp{font-size:19px}
   .flip{font-size:16px}
-  .detail{font-size:17px}
+  .detail{font-size:17px} .yk{font-size:16px}
   .score{font-size:15px}
   .chips button{font-size:19px}
   .spotres{font-size:16px}
@@ -466,11 +472,11 @@ function pickBook(){
 }
 const BOOK=pickBook();
 try{ localStorage.setItem(BOOK_KEY,BOOK.no); }catch(e){}
-let Q=[], CHS=[];                       // 問題と章の一覧。loadBook() で読み込む
+let Q=[], CHS=[], YKS={};   // YKS: 横断の比較（論点の名前→{t,r}）                       // 問題と章の一覧。loadBook() で読み込む
 /* 版スタンプ。VER は「この行を伏せたファイル内容」の sha256 先頭8桁で、
    npm test（scripts/version-stamp.mjs）が一致を強制する。
    内容を変えれば必ず変わるので、画面の値を見れば新旧を判別できる。 */
-const VER='489ecafd';
+const VER='6fc1a6bc';
 const KEY=BOOK.key;                    // 手元の記録の保存先（冊ごと）
 const LV=['未学習','要復習','不安あり','覚えた','完璧'];
 const LVC=['#64748b','#ef4444','#eab308','#22c55e','#3b82f6'];
@@ -1287,6 +1293,10 @@ function revealFb(){
 /* 重み付けの点数の内訳（2026-10-12）。
    過去問でそのまま問われた点 +5/件、★5 +2・★4 +1、Aゾーン +1、教材の色 赤3・青2・太字1、法改正 +2、横断 +2。
    出題セットは4点以上（改正点は点数によらず出す）。 */
+function ykBox(q){   // 横断の比較の枠。同じ論点の問題は同じ比較を見る
+  const y=q.yk&&YKS[q.yk]; if(!y) return '';
+  return `<div class="yk"><div class="ykt">横断｜${y.t}</div>`+y.r.map(([a,b])=>`<div class="ykr"><b>${a}</b>${b}</div>`).join('')+'</div>';
+}
 function scoreLine(q){
   const c=q.sc; if(!c) return '';
   const CL={red:['赤字',3],blue:['青字',2],bold:['太字',1]};
@@ -1323,6 +1333,7 @@ function feedback(ok,correctLabel){
   document.getElementById('exp').innerHTML=head+cur.exp
     +(cur.fig||'')
     +(cur.detail?`<div class="detail">${cur.detail}</div>`:'')
+    +ykBox(cur)
     +scoreLine(cur)
     +refLine(cur.page);
   const sec=stopTimer(); lastSec=sec;
@@ -1580,7 +1591,7 @@ function resetAll(){
 /* 冊の問題を読み込む。?v=版 を付けて、本体と同じ版の問題を必ず読む（古いファイルの使い回しを避ける） */
 function loadBook(){
   return fetch('data/q'+BOOK.no+'.json?v='+VER).then(r=>{ if(!r.ok) throw new Error('HTTP '+r.status); return r.json(); })
-    .then(d=>{ Q=d.q||[]; CHS=d.chs||[]; lg('book_load',{b:BOOK.no,n:Q.length}); })
+    .then(d=>{ Q=d.q||[]; CHS=d.chs||[]; YKS=d.yks||{}; lg('book_load',{b:BOOK.no,n:Q.length}); })
     .catch(e=>{
       lg('book_load_fail',{b:BOOK.no,m:String(e).slice(0,60)});
       const w=document.getElementById('warn');
