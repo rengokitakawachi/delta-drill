@@ -470,7 +470,7 @@ let Q=[], CHS=[];                       // 問題と章の一覧。loadBook() �
 /* 版スタンプ。VER は「この行を伏せたファイル内容」の sha256 先頭8桁で、
    npm test（scripts/version-stamp.mjs）が一致を強制する。
    内容を変えれば必ず変わるので、画面の値を見れば新旧を判別できる。 */
-const VER='f32699af';
+const VER='b5fec486';
 const KEY=BOOK.key;                    // 手元の記録の保存先（冊ごと）
 const LV=['未学習','要復習','不安あり','覚えた','完璧'];
 const LVC=['#64748b','#ef4444','#eab308','#22c55e','#3b82f6'];
@@ -1285,7 +1285,7 @@ function revealFb(){
 }
 
 /* 重み付けの点数の内訳（2026-10-12）。
-   過去問でそのまま問われた点 +5/件、★5 +2・★4 +1、Aゾーン +1、教材の色 赤3・青2・太字1、法改正 +2。
+   過去問でそのまま問われた点 +5/件、★5 +2・★4 +1、Aゾーン +1、教材の色 赤3・青2・太字1、法改正 +2、横断 +2。
    出題セットは4点以上（改正点は点数によらず出す）。 */
 function scoreLine(q){
   const c=q.sc; if(!c) return '';
@@ -1300,6 +1300,7 @@ function scoreLine(q){
   if(c.z==='A'){ t+=1; parts.push('Aゾーン +1'); } else if(c.z) parts.push(c.z+'ゾーン');
   if(CL[c.c]){ t+=CL[c.c][1]; parts.push(`${CL[c.c][0]} +${CL[c.c][1]}`); }
   if(c.v){ t+=2; parts.push('法改正 +2'); }
+  if(c.y){ t+=2; parts.push('横断 +2'); }   // 横断まとめに載る論点（2026-10-17 木下氏）
   if(c.k) parts.push('改正点のため点数によらず出題');
   return `<div class="score">重要度 <b>${t}点</b>　${parts.join('／')}</div>`;
 }
