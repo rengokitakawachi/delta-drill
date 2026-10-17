@@ -470,7 +470,7 @@ let Q=[], CHS=[];                       // 問題と章の一覧。loadBook() �
 /* 版スタンプ。VER は「この行を伏せたファイル内容」の sha256 先頭8桁で、
    npm test（scripts/version-stamp.mjs）が一致を強制する。
    内容を変えれば必ず変わるので、画面の値を見れば新旧を判別できる。 */
-const VER='789be112';
+const VER='8434c083';
 const KEY=BOOK.key;                    // 手元の記録の保存先（冊ごと）
 const LV=['未学習','要復習','不安あり','覚えた','完璧'];
 const LVC=['#64748b','#ef4444','#eab308','#22c55e','#3b82f6'];
@@ -687,7 +687,7 @@ function QA(){ return QS().filter(q=>typeOn(q.t)); }
 /* 毎日の出題（2026-10-12〜）は完璧を外す。完璧は「完璧の確認テスト」でだけ出し、間違えたら要復習に戻って毎日の出題に復帰する */
 /* 完璧の手前（覚えたで直近2回が続けて正解）は、前回から PERFECT_GAP 日あくまで、おまかせと復習優先には出さない（2026-10-17 木下氏）。
    早く出すと、正解しても日数が足りず完璧に上がらないうえ、前回の日付が新しくなって、いつまでも完璧にならない。
-   章ごと・未出題優先・全問通しは、選んで解く出題なので外さない。 */
+   章ごと・全問通しは選んで解く出題なので外さない（未出題からは、まだ解いていない問題しか出さない）。 */
 function waitPerfect(id){
   if(box(id)!==3 || hist(id).slice(-2)!=='11') return false;
   const g=daysSince(id); return g!==null && g<PERFECT_GAP;
@@ -1112,10 +1112,8 @@ function start(mode){
   else if(mode==='perfect')                         // 完璧の確認テスト: 前回から間があいている順
     pool=perfectList().map(q=>({q:q,g:daysSince(q.id)})).sort((a,b)=>(b.g===null?1e9:b.g)-(a.g===null?1e9:a.g)).map(x=>x.q).slice(0,GOAL);
   else if(mode==='review') pool=shuffle(dueList());
-  else if(mode==='new'){                   // 未出題優先: 未出題 → 足りない分はおまかせの順
-    const fresh=shuffle(A.filter(q=>box(q.id)===0));
-    pool=fresh.concat(byPriority(A.filter(q=>box(q.id)>0))).slice(0,GOAL);
-  }
+  else if(mode==='new')                    // 未出題から: まだ解いていない問題だけ。足りなければその数で終わる（2026-10-17 木下氏）
+    pool=shuffle(A.filter(q=>box(q.id)===0)).slice(0,GOAL);
   else pool=byPriority(A.filter(q=>!waitPerfect(q.id))).slice(0,GOAL);   // auto: 優先度順（完璧の手前で7日たたない問題は除く）
   if(!pool.length){alert('対象の問題がありません');return;}
   idx=0;lg('start',{mode:mode,n:pool.length});
