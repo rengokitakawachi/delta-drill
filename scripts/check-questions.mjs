@@ -93,6 +93,12 @@ for (const q of Q) {
       else {
         // w は spotChunks で誤り箇所を特定するのに使うため、誤り版で一意である必要がある
         if (q.qx.split(q.w).length - 1 !== 1) errs.push(`${q.id} の誤り版に w「${q.w}」が1回でない`);
+        // wa（別解の誤り箇所）は誤り版に1回だけ現れ、w とは別の節にあること
+        for (const x of q.wa || []) {
+          if (q.qx.split(x).length - 1 !== 1) errs.push(`${q.id} の誤り版に wa「${x}」が1回でない`);
+          const ch = spotChunks(q.qx, q.w);
+          if (ch && !ch.some(c => !c.hit && c.t.includes(x))) errs.push(`${q.id} の wa「${x}」が w と別の節に収まっていない`);
+        }
         if (q.qx.replace(q.w, q.r) !== q.q) errs.push(`${q.id} は w→r の置き換えで正解版に一致しない`);
         // r が正解版に複数回出るのは、入れ替え型を単純置換で作って片方の語が消えた徴候。
         // 実際に o006（「次いで年金」）と o099（「都道府県を交付する」）がこれで壊れていた。
