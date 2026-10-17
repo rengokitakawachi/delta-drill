@@ -470,7 +470,7 @@ let Q=[], CHS=[];                       // 問題と章の一覧。loadBook() �
 /* 版スタンプ。VER は「この行を伏せたファイル内容」の sha256 先頭8桁で、
    npm test（scripts/version-stamp.mjs）が一致を強制する。
    内容を変えれば必ず変わるので、画面の値を見れば新旧を判別できる。 */
-const VER='f5fff6fb';
+const VER='a630e53f';
 const KEY=BOOK.key;                    // 手元の記録の保存先（冊ごと）
 const LV=['未学習','要復習','不安あり','覚えた','完璧'];
 const LVC=['#64748b','#ef4444','#eab308','#22c55e','#3b82f6'];
@@ -1284,7 +1284,9 @@ function feedback(ok,correctLabel){
   const chunks=(ok && cur.t==='ox' && cur._ans===false && cur.w) ? spotChunks(cur._text,cur.w) : null;
   if(chunks){
     const cb=document.getElementById('chips');
-    cb.innerHTML=chunks.map((c,i)=>`<button data-hit="${c.hit?1:0}" onclick="spotPick(${i})">${c.t}</button>`).join('');
+    // wa：別解の誤り箇所。用語と定義のどちらを直しても正しい文になる問題で、そちらの節も正解にする（2026-10-17 木下氏・10-514）
+    const wa=cur.wa||[];
+    cb.innerHTML=chunks.map((c,i)=>`<button data-hit="${c.hit||wa.some(x=>c.t.includes(x))?1:0}" onclick="spotPick(${i})">${c.t}</button>`).join('');
     sp.style.display='block';
   }else{
     revealFb();
