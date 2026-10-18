@@ -54,7 +54,7 @@ padding:13px 14px;text-align:left;font-size:14px;font-weight:700;cursor:pointer}
 .rangehd b{color:var(--txt)}
 .rangehd button{margin-left:auto;background:none;border:1px solid var(--line);color:var(--sub);border-radius:8px;padding:4px 9px;font-size:11px}
 .rangehd button+button{margin-left:0}
-.chips{display:flex;flex-wrap:wrap;gap:6px}
+.chgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:6px}   /* 章の札。幅をそろえる（誤り箇所の .chips とは別） */
 .chsel{background:var(--card2);border:1px solid var(--line);color:var(--txt);border-radius:10px;padding:6px 9px;font-size:12.5px;font-weight:700;text-align:left;line-height:1.35}
 .chsel small{display:block;font-weight:400;font-size:10.5px;color:var(--sub)}
 .chsel.on{border-color:var(--acc);background:rgba(56,189,248,.18);color:#bae6fd}
@@ -326,7 +326,7 @@ body.incard header{display:none}
     <h2>出題</h2>
     <div class="rangehd">範囲：<b id="rangeN">全章</b>
       <button onclick="rangeSet(true)">全選択</button><button onclick="rangeSet(false)">選択解除</button></div>
-    <div class="chips" id="chlist" style="margin-bottom:14px"></div>
+    <div class="chgrid" id="chlist" style="margin-bottom:14px"></div>
     <div class="btnrow">
       <button class="mbtn primary" onclick="start('auto')">おまかせ出題
         <small>完璧を除く <span id="dailyN">0</span>問から、前回からの間隔・定着度・直近の成否で重みづけして出します</small></button>
@@ -488,7 +488,7 @@ let Q=[], CHS=[], YKS={};   // YKS: 横断の比較（論点の名前→{t,r}）
 /* 版スタンプ。VER は「この行を伏せたファイル内容」の sha256 先頭8桁で、
    npm test（scripts/version-stamp.mjs）が一致を強制する。
    内容を変えれば必ず変わるので、画面の値を見れば新旧を判別できる。 */
-const VER='1469749f';
+const VER='82f93bc6';
 const KEY=BOOK.key;                    // 手元の記録の保存先（冊ごと）
 const LV=['未学習','要復習','不安あり','覚えた','完璧'];
 const LVC=['#64748b','#ef4444','#eab308','#22c55e','#3b82f6'];
