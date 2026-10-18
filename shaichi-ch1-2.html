@@ -49,6 +49,16 @@ padding:13px 14px;text-align:left;font-size:14px;font-weight:700;cursor:pointer}
 .mbtn small .mb{display:block;height:4px;border-radius:3px;background:#0b1220;margin-top:5px;overflow:hidden}
 .mbtn small .mb i{display:block;height:100%;border-radius:3px;background:linear-gradient(90deg,#22c55e,#3b82f6);min-width:2px}
 .mbtn:disabled{opacity:.35}
+/* 出題の範囲（章を選ぶ・2026-10-18 木下氏） */
+.rangehd{display:flex;align-items:center;gap:8px;font-size:12px;color:var(--sub);margin-bottom:6px}
+.rangehd b{color:var(--txt)}
+.rangehd button{margin-left:auto;background:none;border:1px solid var(--line);color:var(--sub);border-radius:8px;padding:4px 9px;font-size:11px}
+.rangehd button+button{margin-left:0}
+.chgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:6px}   /* 章の札。幅をそろえる（誤り箇所の .chips とは別） */
+.chsel{background:var(--card2);border:1px solid var(--line);color:var(--txt);border-radius:10px;padding:6px 9px;font-size:12.5px;font-weight:700;text-align:left;line-height:1.35}
+.chsel small{display:block;font-weight:400;font-size:10.5px;color:var(--sub)}
+.chsel.on{border-color:var(--acc);background:rgba(56,189,248,.18);color:#bae6fd}
+.chsel:disabled{opacity:.35}
 .mbtn.primary{background:linear-gradient(135deg,#0ea5e9,#2563eb);border:none}
 .card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:16px;display:none;flex-direction:column}
 .meta{display:flex;justify-content:space-between;font-size:11px;color:var(--sub);margin-bottom:8px}
@@ -314,6 +324,9 @@ body.incard header{display:none}
   </div>
   <div class="panel">
     <h2>出題</h2>
+    <div class="rangehd">範囲：<b id="rangeN">全章</b>
+      <button onclick="rangeSet(true)">全選択</button><button onclick="rangeSet(false)">選択解除</button></div>
+    <div class="chgrid" id="chlist" style="margin-bottom:14px"></div>
     <div class="btnrow">
       <button class="mbtn primary" onclick="start('auto')">おまかせ出題
         <small>完璧を除く <span id="dailyN">0</span>問から、前回からの間隔・定着度・直近の成否で重みづけして出します</small></button>
@@ -325,7 +338,6 @@ body.incard header{display:none}
         <small id="newN"></small></button>
       <button class="mbtn" id="btnPerf" onclick="start('perfect')">完璧の確認テスト
         <small id="perfN"></small></button>
-      <div class="btnrow" id="chlist"></div>
       <button class="mbtn" onclick="start('all')">全問を通しで
         <small id="allN">定着度に関係なく全問</small></button>
     </div>
@@ -476,7 +488,7 @@ let Q=[], CHS=[], YKS={};   // YKS: 横断の比較（論点の名前→{t,r}）
 /* 版スタンプ。VER は「この行を伏せたファイル内容」の sha256 先頭8桁で、
    npm test（scripts/version-stamp.mjs）が一致を強制する。
    内容を変えれば必ず変わるので、画面の値を見れば新旧を判別できる。 */
-const VER='fbcb0912';
+const VER='82f93bc6';
 const KEY=BOOK.key;                    // 手元の記録の保存先（冊ごと）
 const LV=['未学習','要復習','不安あり','覚えた','完璧'];
 const LVC=['#64748b','#ef4444','#eab308','#22c55e','#3b82f6'];
@@ -719,9 +731,18 @@ function waitPerfect(id){
   if(box(id)!==3 || hist(id).slice(-2)!=='11') return false;
   const g=daysSince(id); return g!==null && g<PERFECT_GAP;
 }
-function QD(){ return QA().filter(q=>box(q.id)!==4); }
+/* 出題の範囲（2026-10-18 木下氏）。章を複数選べる。何も選ばなければ全章。冊ごと・端末ごとに覚える。
+   出題のボタン（おまかせ・復習優先・未出題から・完璧の確認・全問を通しで）は、すべてこの範囲の中から出す。 */
+const RKEY='range_'+BOOK.no;
+let RANGE=new Set((()=>{ try{ return JSON.parse(localStorage.getItem(RKEY)||'[]'); }catch(e){ return []; } })());
+function saveRange(){ try{ localStorage.setItem(RKEY,JSON.stringify([...RANGE])); }catch(e){} }
+function inRange(q){ return !RANGE.size || RANGE.has(q.ch); }
+function QR(){ return QA().filter(inRange); }
+function toggleCh(n){ RANGE.has(n)?RANGE.delete(n):RANGE.add(n); saveRange(); renderHome(); }
+function rangeSet(all){ RANGE=new Set(all?CHS.filter(c=>QA().some(q=>q.ch===c.n)).map(c=>c.n):[]); saveRange(); renderHome(); }
+function QD(){ return QR().filter(q=>box(q.id)!==4); }
 const PERFECT_CHECK=30;                        // 前回（完璧になった日・前回の確認）からこの日数以上たった完璧を「確認時期」とする（2026-10-12 木下氏）
-function perfectList(){ return QA().filter(q=>box(q.id)===4); }
+function perfectList(){ return QR().filter(q=>box(q.id)===4); }
 function perfectDue(){ return perfectList().filter(q=>{ const g=daysSince(q.id); return g===null || g>=PERFECT_CHECK; }); }
 function dueList(){return QD().filter(q=>box(q.id)>0&&due(q.id)&&!waitPerfect(q.id));}   // ホームの復習の数と復習優先の出題で共通
 
@@ -777,7 +798,7 @@ function renderHome(){
     ? `完璧 ${pl}問のうち、前回から${PERFECT_CHECK}日以上たった問題 ${pd}問。間違えたら要復習に戻ります`
     : '完璧の問題はまだありません';
   document.getElementById('btnPerf').disabled = pl===0;
-  const nn=QA().filter(q=>box(q.id)===0).length;
+  const nn=QR().filter(q=>box(q.id)===0).length;
   document.getElementById('newN').textContent = nn?`まだ解いていない ${nn}問から出します`:'未出題はありません';
   document.getElementById('btnNew').disabled = nn===0;
   /* 章のボタンは、冊のデータの章の一覧（chs）から作る */
@@ -785,11 +806,14 @@ function renderHome(){
     const qs=QA().filter(q=>q.ch===c.n);
     const p=qs.reduce((a,q)=>a+W[box(q.id)],0)/(qs.length||1)*100;
     const un=qs.filter(q=>box(q.id)===0).length;
-    return `<button class="mbtn" onclick="start('ch${c.n}')" ${qs.length?'':'disabled'}>${c.n}章 ${c.name}${c.pages?`（${c.pages}）`:''}`
-      +`<small>${qs.length}問　定着 <b>${p.toFixed(1)}%</b>${un?`　未学習 ${un}問`:'　未学習なし'}`
-      +`<span class="mb"><i style="width:${p.toFixed(1)}%"></i></span></small></button>`;
+    const on=RANGE.has(c.n);
+    return `<button class="chsel${on?' on':''}" onclick="toggleCh(${c.n})" ${qs.length?'':'disabled'} title="${c.name}${c.pages?`（${c.pages}）`:''}">${on?'✓ ':''}${c.n}章 ${c.name}`
+      +`<small>${qs.length}問・定着${p.toFixed(0)}%${un?`・未${un}`:''}</small></button>`;
   }).join('');
-  document.getElementById('allN').innerHTML=`定着度に関係なく全${QA().length}問`;
+  document.getElementById('allN').innerHTML=`定着度に関係なく全${QR().length}問`;
+  const sel=CHS.filter(c=>RANGE.has(c.n)).map(c=>c.n+'章');
+  const avail=CHS.filter(c=>QA().some(q=>q.ch===c.n)).length;
+  document.getElementById('rangeN').textContent = !sel.length ? '全章' : sel.length>=avail ? `全章（全選択・${QR().length}問）` : `${sel.join('・')}（${QR().length}問）`;
   const qo=QS().filter(q=>q.t==='ox').length, qn=QS().filter(q=>q.t==='sen').length;
   document.getElementById('qsum').textContent=`${BOOK.mark}${BOOK.tag}　○× ${qo}問／選択式 ${qn}問・計${qo+qn}問（出題セット）`;
   document.getElementById('tyOx').className=(typeOn('ox')?'on':'');
@@ -1136,7 +1160,7 @@ function start(mode){
   const cm=/^ch(\d+)$/.exec(mode);
   const A=QD();                                    // 毎日の出題は完璧を除く
   if(cm) pool=shuffle(A.filter(q=>q.ch===+cm[1]));
-  else if(mode==='all') pool=shuffle(QA().slice()); // 全問を通しでは完璧も含める
+  else if(mode==='all') pool=shuffle(QR().slice()); // 全問を通しでは完璧も含める（範囲の中で）
   else if(mode==='perfect')                         // 完璧の確認テスト: 前回から間があいている順
     pool=perfectList().map(q=>({q:q,g:daysSince(q.id)})).sort((a,b)=>(b.g===null?1e9:b.g)-(a.g===null?1e9:a.g)).map(x=>x.q).slice(0,GOAL);
   else if(mode==='review') pool=shuffle(dueList());
