@@ -491,7 +491,7 @@ let Q=[], CHS=[], YKS={};   // YKS: 横断の比較（論点の名前→{t,r}）
 /* 版スタンプ。VER は「この行を伏せたファイル内容」の sha256 先頭8桁で、
    npm test（scripts/version-stamp.mjs）が一致を強制する。
    内容を変えれば必ず変わるので、画面の値を見れば新旧を判別できる。 */
-const VER='9877d2d0';
+const VER='e4a4f5fe';
 const KEY=BOOK.key;                    // 手元の記録の保存先（冊ごと）
 const LV=['未学習','要復習','不安あり','覚えた','完璧'];
 const LVC=['#64748b','#ef4444','#eab308','#22c55e','#3b82f6'];
@@ -925,8 +925,14 @@ function saveSync(){
   try{localStorage.setItem('sync_code',c);}catch(e){}
   connectSync(); renderHome();
 }
+/* ログインが終わるまで「接続中…」と出し、15秒たっても終わらなければ原因の目安を出す（2026-10-21 木下氏）。
+   これまでは「オフ」のまま何も出ず、接続を押しても進まない理由が分からなかった。 */
+const FB_WAIT_MS=15000; let fbT0=0;
+function fbWaitMsg(){ setSt('Firebase につながりません（通信やコンテンツブロッカーを確かめて、ページを開き直してください）','err'); }
 function initFB(){
   if(typeof firebase==='undefined'){ setSt('SDK未読込（オフラインで動作します）','err'); return; }
+  setSt('Firebase に接続中…',''); fbT0=Date.now();
+  setTimeout(()=>{ if(!fbReady) fbWaitMsg(); }, FB_WAIT_MS);
   try{
     firebase.initializeApp(FBCFG);
     firebase.auth().onAuthStateChanged(u=>{ if(u){ fbReady=true; connectSync(); } });
@@ -936,7 +942,11 @@ function initFB(){
 function connectSync(){
   if(unsub){ unsub(); unsub=null; }
   firstSnap=false; remoteN=0; lastPushed=''; snapN=0;
-  if(!fbReady) return;
+  if(!fbReady){   // ログイン待ち。15秒を過ぎていれば、つながらない旨をそのまま出す
+    if(fbT0 && Date.now()-fbT0>=FB_WAIT_MS) fbWaitMsg();
+    else setSt('Firebase に接続中…（つながったら自動で同期を始めます）','');
+    return;
+  }
   const code=syncCode();
   if(!code){
     syncDoc=null; setSt('オフ（同期コード未設定）','');
