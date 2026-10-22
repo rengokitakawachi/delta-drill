@@ -54,6 +54,11 @@ padding:13px 14px;text-align:left;font-size:14px;font-weight:700;cursor:pointer}
 .rangehd b{color:var(--txt)}
 .rangehd button{margin-left:auto;background:none;border:1px solid var(--line);color:var(--sub);border-radius:8px;padding:4px 9px;font-size:11px}
 .rangehd button+button{margin-left:0}
+.readrow{display:flex;align-items:center;gap:6px;flex-wrap:wrap;font-size:12px;color:var(--sub);margin-bottom:8px}   /* 読んだページ（2026-10-22） */
+.readrow select,.readrow input{background:var(--card2);border:1px solid var(--line);color:var(--txt);border-radius:8px;padding:4px 6px;font-size:12px}
+.readrow input{width:64px}
+.readrow button{background:var(--acc);border:none;color:#04121f;border-radius:8px;padding:4px 10px;font-size:11.5px;font-weight:700}
+.readrow #rdNow{flex-basis:100%;font-size:11px}
 .chgrid{display:grid;align-items:stretch;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:6px}   /* 章の札。幅をそろえる（誤り箇所の .chips とは別） */
 .chsel{background:var(--card2);border:1px solid var(--line);color:var(--txt);border-radius:10px;padding:6px 9px;font-size:12.5px;font-weight:700;text-align:left;line-height:1.35}
 .chsel small{display:block;font-weight:400;font-size:10.5px;color:var(--sub)}
@@ -327,6 +332,10 @@ body.incard header{display:none}
   </div>
   <div class="panel">
     <h2>出題</h2>
+    <div class="readrow">読んだページ
+      <select id="rdDay"><option value="0">今日</option><option value="1">昨日</option></select>
+      p.<input id="rdP" type="number" inputmode="numeric" min="1"> まで <button onclick="saveRead()">記録</button>
+      <span id="rdNow"></span></div>
     <div class="rangehd">範囲：<b id="rangeN">全章</b>
       <button onclick="rangeSet(true)">全選択</button><button onclick="rangeSet(false)">選択解除</button></div>
     <div class="chgrid" id="chlist" style="margin-bottom:14px"></div>
@@ -491,7 +500,7 @@ let Q=[], CHS=[], YKS={};   // YKS: 横断の比較（論点の名前→{t,r}）
 /* 版スタンプ。VER は「この行を伏せたファイル内容」の sha256 先頭8桁で、
    npm test（scripts/version-stamp.mjs）が一致を強制する。
    内容を変えれば必ず変わるので、画面の値を見れば新旧を判別できる。 */
-const VER='f3370a9b';
+const VER='7f1e9167';
 const KEY=BOOK.key;                    // 手元の記録の保存先（冊ごと）
 const LV=['未学習','要復習','不安あり','覚えた','完璧'];
 const LVC=['#64748b','#ef4444','#eab308','#22c55e','#3b82f6'];
@@ -519,6 +528,24 @@ let S=loadS();
    GitHub Actions の delta-study-sync がこれを読んで app history log に書き出す。 */
 if(!S.daily||typeof S.daily!=='object') S.daily={};
 if(!S.log||typeof S.log!=='object') S.log={};
+/* 読んだページ（2026-10-22 木下氏）。日付→{p:その日に読み終えたページ, at:記録した時刻}。
+   日付は 3:00 区切り（Studyplus にそろえる）。同期で sync/{code}.<冊のフィールド>.read に載り、
+   毎晩の delta-study の同期が学習記録（実績・current_position）に写す。
+   出題は、記録のうちいちばん先のページまでに絞る。 */
+if(!S.read||typeof S.read!=='object') S.read={};
+const READ_SHIFT_H=3;
+function readDay(back){
+  const d=new Date(Date.now()-READ_SHIFT_H*3600000); d.setDate(d.getDate()-(back||0));
+  return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
+}
+function readMax(){ let m=0; for(const k in S.read) m=Math.max(m,(S.read[k]||{}).p||0); return m; }
+function saveRead(){
+  const el=document.getElementById('rdP'), v=parseInt(el.value,10);
+  if(!(v>0)){ alert('読み終えたページを数字で入れてください'); return; }
+  const day=readDay(+document.getElementById('rdDay').value||0);
+  S.read[day]={p:v, at:Date.now()}; lg('read',{day:day,p:v});
+  el.value=''; saveS(); renderHome();
+}
 /* 日付の切り替え。以前は開いたときだけ確かめていたため、前の日から開いたままの画面で
    翌朝解くと、その分が前の日に足され、開き直すと今日が0問になった（2026-10-17 iPad）。
    いまは開いたとき・答えるとき・画面に戻ったときに確かめる。 */
@@ -746,7 +773,10 @@ function waitPerfect(id){
 const RKEY='range_'+BOOK.no;
 let RANGE=new Set((()=>{ try{ return JSON.parse(localStorage.getItem(RKEY)||'[]'); }catch(e){ return []; } })());
 function saveRange(){ try{ localStorage.setItem(RKEY,JSON.stringify([...RANGE])); }catch(e){} }
-function inRange(q){ return !RANGE.size || RANGE.has(q.ch); }
+function inRange(q){
+  const m=readMax(); if(m && q.page>m) return false;   // 読んだページより後ろは出さない
+  return !RANGE.size || RANGE.has(q.ch);
+}
 function QR(){ return QA().filter(inRange); }
 function toggleCh(n){ RANGE.has(n)?RANGE.delete(n):RANGE.add(n); saveRange(); renderHome(); }
 function rangeSet(all){ RANGE=new Set(all?CHS.filter(c=>QA().some(q=>q.ch===c.n)).map(c=>c.n):[]); saveRange(); renderHome(); }
@@ -823,7 +853,13 @@ function renderHome(){
   document.getElementById('allN').innerHTML=`定着度に関係なく全${QR().length}問`;
   const sel=CHS.filter(c=>RANGE.has(c.n)).map(c=>c.n+'章');
   const avail=CHS.filter(c=>QA().some(q=>q.ch===c.n)).length;
-  document.getElementById('rangeN').textContent = !sel.length ? '全章' : sel.length>=avail ? `全章（全選択・${QR().length}問）` : `${sel.join('・')}（${QR().length}問）`;
+  const rm=readMax();
+  document.getElementById('rangeN').textContent = (!sel.length ? '全章' : sel.length>=avail ? `全章（全選択・${QR().length}問）` : `${sel.join('・')}（${QR().length}問）`)
+    + (rm ? `　p.${rm}まで（${QR().length}問）` : '');
+  { const ds=Object.keys(S.read).filter(k=>(S.read[k]||{}).p===rm).sort(), last=ds[ds.length-1];
+    document.getElementById('rdNow').textContent = rm
+      ? `いま：p.${rm} まで（${+last.slice(5,7)}/${+last.slice(8,10)} 記録）。これより後ろのページの問題は出しません`
+      : 'まだ記録がありません（全ページから出します）'; }
   const qo=QS().filter(q=>q.t==='ox').length, qn=QS().filter(q=>q.t==='sen').length;
   document.getElementById('qsum').textContent=`${BOOK.mark}${BOOK.tag}　○× ${qo}問／選択式 ${qn}問・計${qo+qn}問（出題セット）`;
   document.getElementById('tyOx').className=(typeOn('ox')?'on':'');
@@ -1013,6 +1049,10 @@ function mergeRemote(d){
       if(r>((S[k]||{})[dt]||0)){ S[k][dt]=r; ch=true; }
     }
   }
+  if(d.read) for(const k in d.read){          // 読んだページは日付ごとに新しい記録を採る
+    const r=d.read[k]||{}, l=S.read[k];
+    if(r.p && (!l || (r.at||0)>(l.at||0))){ S.read[k]={p:r.p, at:r.at||0}; ch=true; }
+  }
   S.daily[S.day]=Math.max(S.daily[S.day]||0,S.n);
   S.log[S.day]=Math.max(S.log[S.day]||0,S.t);
   return ch;
@@ -1031,10 +1071,10 @@ function pushNow(){
   /* 学習記録の中身が前回と同じなら送らない。
      ループが再発しても、ここで必ず止まる。診断ログは変化判定に入れない
      （ログが増えただけで送信が起きると、それ自体がループの燃料になる）。 */
-  const body=JSON.stringify({p:S.p, day:S.day, n:S.n, t:S.t, daily:S.daily, log:S.log});
+  const body=JSON.stringify({p:S.p, day:S.day, n:S.n, t:S.t, daily:S.daily, log:S.log, read:S.read});
   if(body===lastPushed) return;
   lastPushed=body;
-  try{ syncDoc.set({[FIELD]:{p:S.p, day:S.day, n:S.n, t:S.t, daily:S.daily, log:S.log,
+  try{ syncDoc.set({[FIELD]:{p:S.p, day:S.day, n:S.n, t:S.t, daily:S.daily, log:S.log, read:S.read,
        diag:readLog().slice(-60), ts:Date.now()}},{merge:true}); lg('push',{p:nP(S.p),n:S.n}); }
   catch(e){ lg('push_fail',String(e).slice(0,60)); }
 }
@@ -1066,7 +1106,7 @@ function bkImport(merge){
     msg.textContent=`統合しました（新規${add}件・更新${upd}件）`;
   }else{
     if(!confirm('この端末の記録を、貼り付けた内容で置き換えます。よろしいですか？')) return;
-    S={p:d.p, day:today(), n:d.day===today()?(d.n||0):0, t:d.day===today()?(d.t||0):0, daily:d.daily||{}, log:d.log||{}};
+    S={p:d.p, day:today(), n:d.day===today()?(d.n||0):0, t:d.day===today()?(d.t||0):0, daily:d.daily||{}, log:d.log||{}, read:S.read};
     msg.textContent='置き換えました。';
   }
   saveS(); renderHome();
@@ -1619,7 +1659,7 @@ function resetAll(){
   if(!confirm(`この端末の ${BOOK.mark}${BOOK.name} の学習記録をすべて消します（ほかの冊の記録は残ります）。よろしいですか？`))return;
   lg('resetAll',{p:Object.keys(S.p).length});    // 明示的なリセット
   allowEmptyPush=true;                      // 意図したリセットなのでクラウドにも反映する
-  S={p:{},day:today(),n:0,t:0,daily:{},log:{}};saveS();renderHome();
+  S={p:{},day:today(),n:0,t:0,daily:{},log:{},read:S.read};saveS();renderHome();   // 読んだページは学習記録ではないので残す
 }
 (function(){
   let ok=true;
