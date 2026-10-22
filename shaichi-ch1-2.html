@@ -500,7 +500,7 @@ let Q=[], CHS=[], YKS={};   // YKS: 横断の比較（論点の名前→{t,r}）
 /* 版スタンプ。VER は「この行を伏せたファイル内容」の sha256 先頭8桁で、
    npm test（scripts/version-stamp.mjs）が一致を強制する。
    内容を変えれば必ず変わるので、画面の値を見れば新旧を判別できる。 */
-const VER='7f1e9167';
+const VER='b50af141';
 const KEY=BOOK.key;                    // 手元の記録の保存先（冊ごと）
 const LV=['未学習','要復習','不安あり','覚えた','完璧'];
 const LVC=['#64748b','#ef4444','#eab308','#22c55e','#3b82f6'];
@@ -508,7 +508,12 @@ const W=[0,0.25,0.5,0.75,1.0];
 const IV=[0,0,1,3,7];   // 日数。box0/1は即再出題
 const GOAL=40;   // 1日の目標・1回の出題数（2026-10-12 木下氏 20→40）
 
-function today(){const d=new Date();return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');}
+/* 1日の区切りは 3:00（2026-10-22 木下氏。Studyplus・学習記録の同期にそろえる）。
+   0:00〜2:59 は前の日として数える。今日の数・時間、日別の記録、答えた日（hd）、日数の差のすべてがこれを使う。 */
+const DAY_SHIFT_H=3;
+function dayD(ms){ return new Date((ms==null?Date.now():ms)-DAY_SHIFT_H*3600000); }   // 区切りをずらした日時
+function ymd(d){ return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); }
+function today(){ return ymd(dayD()); }
 function loadS(){try{return JSON.parse(localStorage.getItem(KEY))||{p:{},day:'',n:0};}catch(e){return {p:{},day:'',n:0};}}
 const LOG_KEEP_DAYS=180;   // 日別ログの保持期間
 function pruneLog(o){
@@ -529,15 +534,11 @@ let S=loadS();
 if(!S.daily||typeof S.daily!=='object') S.daily={};
 if(!S.log||typeof S.log!=='object') S.log={};
 /* 読んだページ（2026-10-22 木下氏）。日付→{p:その日に読み終えたページ, at:記録した時刻}。
-   日付は 3:00 区切り（Studyplus にそろえる）。同期で sync/{code}.<冊のフィールド>.read に載り、
+   日付はアプリ全体と同じ 3:00 区切り。同期で sync/{code}.<冊のフィールド>.read に載り、
    毎晩の delta-study の同期が学習記録（実績・current_position）に写す。
    出題は、記録のうちいちばん先のページまでに絞る。 */
 if(!S.read||typeof S.read!=='object') S.read={};
-const READ_SHIFT_H=3;
-function readDay(back){
-  const d=new Date(Date.now()-READ_SHIFT_H*3600000); d.setDate(d.getDate()-(back||0));
-  return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
-}
+function readDay(back){ const d=dayD(); d.setDate(d.getDate()-(back||0)); return ymd(d); }
 function readMax(){ let m=0; for(const k in S.read) m=Math.max(m,(S.read[k]||{}).p||0); return m; }
 function saveRead(){
   const el=document.getElementById('rdP'), v=parseInt(el.value,10);
@@ -564,10 +565,10 @@ function rollDay(){
    上の不具合で前の日に回った今朝の分を戻すため。今日更新した問題の hd のうち今日の日付の回を数える。
    学習時間（秒）は問題ごとに持っていないので戻せない。 */
 function fixTodayN(){
-  const md=mmdd(), td=new Date().toDateString(); let c=0;
+  const md=mmdd(), td=today(); let c=0;
   for(const id in S.p){
     const r=S.p[id]; if(!r||!r.at||typeof r.hd!=='string') continue;
-    if(new Date(r.at).toDateString()!==td) continue;
+    if(ymd(dayD(new Date(r.at).getTime()))!==td) continue;
     for(let k=0;k<r.hd.length;k+=4) if(r.hd.slice(k,k+4)===md) c++;
   }
   if(c>S.n){ S.n=c; S.daily[S.day]=Math.max(S.daily[S.day]||0,c); return true; }
@@ -702,7 +703,7 @@ function pushHist(id,ok){ return (hist(id)+(ok?'1':'0')).slice(-HN); }
 /* 各回の答えた日（2026-10-12〜）。'MMDD' を4文字ずつ古い順につなぎ、h の末尾とそろえて持つ。
    これより前の回には日付が無いので、hd は h より短いことがある（表示では日付なしで出す）。 */
 function histD(id){ const d=(S.p[id]&&S.p[id].hd)||''; return typeof d==='string'?d:''; }
-function mmdd(){ const d=new Date(); return String(d.getMonth()+1).padStart(2,'0')+String(d.getDate()).padStart(2,'0'); }
+function mmdd(){ const d=dayD(); return String(d.getMonth()+1).padStart(2,'0')+String(d.getDate()).padStart(2,'0'); }
 function pushHistD(id){ return (histD(id)+mmdd()).slice(-HN*4); }
 /* 誤答率。直近ほど重くする（10回中いちばん新しい回が最も効く）。
    履歴が無ければ null を返し、呼び出し側で「未知」として扱う。 */
@@ -723,9 +724,9 @@ const GAP_DAYS=[0,1,1,3,7];                   // 目安日数: 未学習・要�
 const LVW=[0,60,40,20,0];                     // 定着度の補助の重み
 function daysSince(id){
   const r=S.p[id]; if(!r||!r.at) return null;
-  const a=new Date(r.at), now=new Date();
+  const a=dayD(new Date(r.at).getTime()), now=dayD();
   const d0=new Date(a.getFullYear(),a.getMonth(),a.getDate()), d1=new Date(now.getFullYear(),now.getMonth(),now.getDate());
-  return Math.round((d1-d0)/86400000);        // 暦日の差（今日答えた＝0）
+  return Math.round((d1-d0)/86400000);        // 日数の差（3:00 区切り。今日答えた＝0）
 }
 function priority(id){
   const b=box(id), h=hist(id), r=wrongRate(id);
