@@ -59,6 +59,8 @@ padding:13px 14px;text-align:left;font-size:14px;font-weight:700;cursor:pointer}
 .readrow input{width:64px}
 .readrow button{background:var(--acc);border:none;color:#04121f;border-radius:8px;padding:4px 10px;font-size:11.5px;font-weight:700}
 .readrow #rdNow{flex-basis:100%;font-size:11px}
+.readrow b{color:var(--txt)}
+.readrow button.undo{background:none;border:1px solid var(--line);color:var(--sub);font-weight:400}
 .chgrid{display:grid;align-items:stretch;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:6px}   /* 章の札。幅をそろえる（誤り箇所の .chips とは別） */
 .chsel{background:var(--card2);border:1px solid var(--line);color:var(--txt);border-radius:10px;padding:6px 9px;font-size:12.5px;font-weight:700;text-align:left;line-height:1.35}
 .chsel small{display:block;font-weight:400;font-size:10.5px;color:var(--sub)}
@@ -332,9 +334,10 @@ body.incard header{display:none}
   </div>
   <div class="panel">
     <h2>出題</h2>
-    <div class="readrow">読んだページ
+    <div class="readrow"><b id="rdBook"></b>の読んだページ
       <select id="rdDay"><option value="0">今日</option><option value="1">昨日</option></select>
       p.<input id="rdP" type="number" inputmode="numeric" min="1"> まで <button onclick="saveRead()">記録</button>
+      <button class="undo" onclick="clearRead()">取り消し</button>
       <span id="rdNow"></span></div>
     <div class="rangehd">範囲：<b id="rangeN">全章</b>
       <button onclick="rangeSet(true)">全選択</button><button onclick="rangeSet(false)">選択解除</button></div>
@@ -500,7 +503,7 @@ let Q=[], CHS=[], YKS={};   // YKS: 横断の比較（論点の名前→{t,r}）
 /* 版スタンプ。VER は「この行を伏せたファイル内容」の sha256 先頭8桁で、
    npm test（scripts/version-stamp.mjs）が一致を強制する。
    内容を変えれば必ず変わるので、画面の値を見れば新旧を判別できる。 */
-const VER='b50af141';
+const VER='ad9d66ec';
 const KEY=BOOK.key;                    // 手元の記録の保存先（冊ごと）
 const LV=['未学習','要復習','不安あり','覚えた','完璧'];
 const LVC=['#64748b','#ef4444','#eab308','#22c55e','#3b82f6'];
@@ -544,8 +547,21 @@ function saveRead(){
   const el=document.getElementById('rdP'), v=parseInt(el.value,10);
   if(!(v>0)){ alert('読み終えたページを数字で入れてください'); return; }
   const day=readDay(+document.getElementById('rdDay').value||0);
+  // 冊の入れ間違いを防ぐため、冊と日付を見せて確かめる（2026-10-22 ①の分を⑩に入れた件）
+  if(!confirm(`${BOOK.mark}${BOOK.name} に、${+day.slice(5,7)}/${+day.slice(8,10)} の分「p.${v} まで」を記録します。`)) return;
   S.read[day]={p:v, at:Date.now()}; lg('read',{day:day,p:v});
   el.value=''; saveS(); renderHome();
+}
+/* 取り消し。消すのではなく p:0（取り消し済み）を新しい時刻で書く。
+   消しただけだと、ほかの端末やクラウドに残った値が同期で戻ってくるため。
+   p:0 の日は、出題の上限にも学習記録にも使わない。 */
+function clearRead(){
+  const day=readDay(+document.getElementById('rdDay').value||0), r=S.read[day];
+  const md=`${+day.slice(5,7)}/${+day.slice(8,10)}`;
+  if(!r||!r.p){ alert(`${BOOK.mark}${BOOK.name} の ${md} の記録はありません`); return; }
+  if(!confirm(`${BOOK.mark}${BOOK.name} の ${md} の記録「p.${r.p} まで」を取り消します。`)) return;
+  S.read[day]={p:0, at:Date.now()}; lg('read_undo',{day:day,p:r.p});
+  saveS(); renderHome();
 }
 /* 日付の切り替え。以前は開いたときだけ確かめていたため、前の日から開いたままの画面で
    翌朝解くと、その分が前の日に足され、開き直すと今日が0問になった（2026-10-17 iPad）。
@@ -854,7 +870,7 @@ function renderHome(){
   document.getElementById('allN').innerHTML=`定着度に関係なく全${QR().length}問`;
   const sel=CHS.filter(c=>RANGE.has(c.n)).map(c=>c.n+'章');
   const avail=CHS.filter(c=>QA().some(q=>q.ch===c.n)).length;
-  const rm=readMax();
+  const rm=readMax(); document.getElementById('rdBook').textContent=BOOK.mark+BOOK.tag;
   document.getElementById('rangeN').textContent = (!sel.length ? '全章' : sel.length>=avail ? `全章（全選択・${QR().length}問）` : `${sel.join('・')}（${QR().length}問）`)
     + (rm ? `　p.${rm}まで（${QR().length}問）` : '');
   { const ds=Object.keys(S.read).filter(k=>(S.read[k]||{}).p===rm).sort(), last=ds[ds.length-1];
@@ -1052,7 +1068,7 @@ function mergeRemote(d){
   }
   if(d.read) for(const k in d.read){          // 読んだページは日付ごとに新しい記録を採る
     const r=d.read[k]||{}, l=S.read[k];
-    if(r.p && (!l || (r.at||0)>(l.at||0))){ S.read[k]={p:r.p, at:r.at||0}; ch=true; }
+    if(typeof r.p==='number' && (!l || (r.at||0)>(l.at||0))){ S.read[k]={p:r.p, at:r.at||0}; ch=true; }   // p:0 は取り消し
   }
   S.daily[S.day]=Math.max(S.daily[S.day]||0,S.n);
   S.log[S.day]=Math.max(S.log[S.day]||0,S.t);
