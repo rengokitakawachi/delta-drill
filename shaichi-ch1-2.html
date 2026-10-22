@@ -243,6 +243,7 @@ body.incard header{display:none}
 .spot.spotted .lb,.spot.spotted .chips,.spot.spotted .skip{display:none}
 .spot.spotted{padding:6px 10px;margin-top:6px}
 .spot.spotted .spotres{margin-top:0}
+.spot.spotted.spotok{display:none!important}   /* 正解なら結果の帯の「誤り箇所 ⭕」で足りるので、欄ごと隠す（2026-10-22 木下氏） */
 /* iPad 縦向きは縦に余裕があるので、詰めた余白を戻して読みやすくする（2026-10-12）。
    横向きは高さが限られるので、下の中間の値にする */
 @media (min-width:744px) and (orientation:portrait){
@@ -503,7 +504,7 @@ let Q=[], CHS=[], YKS={};   // YKS: 横断の比較（論点の名前→{t,r}）
 /* 版スタンプ。VER は「この行を伏せたファイル内容」の sha256 先頭8桁で、
    npm test（scripts/version-stamp.mjs）が一致を強制する。
    内容を変えれば必ず変わるので、画面の値を見れば新旧を判別できる。 */
-const VER='ad9d66ec';
+const VER='c2d37b0a';
 const KEY=BOOK.key;                    // 手元の記録の保存先（冊ごと）
 const LV=['未学習','要復習','不安あり','覚えた','完璧'];
 const LVC=['#64748b','#ef4444','#eab308','#22c55e','#3b82f6'];
@@ -1275,7 +1276,7 @@ function load(){
   document.getElementById('cnt').textContent=`${idx+1} / ${pool.length}　${LV[box(cur.id)]}`;
   document.getElementById('fb').style.display='none';
   document.getElementById('spot').style.display='none';
-  document.getElementById('spot').classList.remove('spotted');
+  document.getElementById('spot').classList.remove('spotted','spotok');
   startTimer();
   if(cur.t==='ox'){
     document.getElementById('qtext').innerHTML=cur._text;
@@ -1368,10 +1369,10 @@ function spotPick(k){
   // 誤り箇所を外したら、×が当たっていても不正解として記録し直す（2026-10-12 木下氏）。
   // 理由を取り違えたまま×が当たっただけで、覚えたことにはならないため。
   if(!ok) spotMiss();
-  d.innerHTML=ok?'⭕ そこです。':'外れ。この設問が問うているのは色の付いた箇所。';
   const vs=document.getElementById('vspot');
   if(vs) vs.innerHTML=ok?'誤り箇所 ⭕':'誤り箇所 ❌<small>（記録は不正解）</small>';
-  document.getElementById('spot').appendChild(d);
+  if(ok) document.getElementById('spot').classList.add('spotok');   // 「そこです」は出さない
+  else { d.innerHTML='外れ。この設問が問うているのは色の付いた箇所。'; document.getElementById('spot').appendChild(d); }
   setTimeout(revealFb,ok?450:900);
 }
 /* 誤り箇所を外したとき、答えた直後に書いた「正解」の記録を「不正解」に書き換える。
