@@ -349,7 +349,7 @@ body.incard header{display:none}
       <button class="mbtn resume" id="btnResume" onclick="resume()" style="display:none">▶ 続きから
         <small id="resumeN"></small></button>
       <button class="mbtn" id="btnRev" onclick="start('review')">復習優先出題
-        <small><span id="dueN">0</span>問が復習期限に達しています</small></button>
+        <small><span id="dueN">0</span>問が復習期限に達しています。重みの高い順に全部出します</small></button>
       <button class="mbtn" id="btnNew" onclick="start('new')">未出題から
         <small id="newN"></small></button>
       <button class="mbtn" id="btnPerf" onclick="start('perfect')">完璧の確認テスト
@@ -514,7 +514,7 @@ let Q=[], CHS=[], YKS={};   // YKS: 横断の比較（論点の名前→{t,r}）
 /* 版スタンプ。VER は「この行を伏せたファイル内容」の sha256 先頭8桁で、
    npm test（scripts/version-stamp.mjs）が一致を強制する。
    内容を変えれば必ず変わるので、画面の値を見れば新旧を判別できる。 */
-const VER='b02727f3';
+const VER='f7d7c697';
 const KEY=BOOK.key;                    // 手元の記録の保存先（冊ごと）
 const LV=['未学習','要復習','不安あり','覚えた','完璧'];
 const LVC=['#64748b','#ef4444','#eab308','#22c55e','#3b82f6'];
@@ -1288,7 +1288,7 @@ function start(mode){
   else if(mode==='all') pool=shuffle(QR().slice()); // 全問を通しでは完璧も含める（範囲の中で）
   else if(mode==='perfect')                         // 完璧の確認テスト: 前回から間があいている順
     pool=perfectList().map(q=>({q:q,g:daysSince(q.id)})).sort((a,b)=>(b.g===null?1e9:b.g)-(a.g===null?1e9:a.g)).map(x=>x.q).slice(0,GOAL);
-  else if(mode==='review') pool=shuffle(dueList());
+  else if(mode==='review') pool=byPriority(dueList());   // 復習優先: 期限の来た問題を全部、おまかせと同じ重みの高い順に（2026-10-28 木下氏。全体では問題集をまたいで並ぶ）
   else if(mode==='new')                    // 未出題から: まだ解いていない問題だけ。足りなければその数で終わる（2026-10-17 木下氏）
     pool=shuffle(A.filter(q=>box(q.id)===0)).slice(0,GOAL);
   else pool=byPriority(A.filter(q=>!waitPerfect(q.id))).slice(0,GOAL);   // auto: 優先度順（完璧の手前で7日たたない問題は除く）
