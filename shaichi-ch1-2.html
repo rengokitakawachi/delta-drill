@@ -96,9 +96,9 @@ padding:12px;font-size:14px;text-align:left;cursor:pointer}
 .senmode{display:flex;gap:7px;margin-top:10px}
 .senmode button{flex:1;border:1px solid var(--line);background:var(--card2);color:var(--txt);border-radius:9px;padding:9px 10px;font-size:12px;cursor:pointer}
 .senmode button.on{background:rgba(56,189,248,.2);border-color:var(--acc);color:#bae6fd}
-/* 冊を選ぶ列（2026-10-15）。問題の無い冊は押せない */
-.books{display:grid;grid-template-columns:repeat(5,1fr);gap:6px}
-.books button{border:1px solid var(--line);background:var(--card2);color:var(--txt);border-radius:9px;padding:8px 0;font-size:17px;cursor:pointer}
+/* 問題集を選ぶ列（2026-10-15。2026-10-27 に略称と全体を足し、1段4個にした。問題集は今後も増える）。問題の無い問題集は押せない */
+.books{display:grid;grid-template-columns:repeat(4,1fr);gap:6px}
+.books button{border:1px solid var(--line);background:var(--card2);color:var(--txt);border-radius:9px;padding:8px 0;font-size:13px;white-space:nowrap;cursor:pointer}
 .books button.on{background:rgba(56,189,248,.2);border-color:var(--acc);color:#bae6fd}
 .books button:disabled{opacity:.3;cursor:default}
 .fb{display:none;margin-top:12px}
@@ -320,7 +320,7 @@ body.incard header{display:none}
 <div id="home">
   <div class="warn" id="warn"></div>
   <div class="panel">
-    <h2>冊 <span class="pct" id="bookName"></span></h2>
+    <h2>問題集 <span class="pct" id="bookName"></span></h2>
     <div class="books" id="books"></div>
   </div>
   <div class="panel">
@@ -335,7 +335,7 @@ body.incard header{display:none}
   </div>
   <div class="panel">
     <h2>出題</h2>
-    <div class="readrow"><b id="rdBook"></b>の読んだページ
+    <div class="readrow" id="rdRow"><b id="rdBook"></b>の読んだページ
       <select id="rdDay"><option value="0">今日</option><option value="1">昨日</option></select>
       p.<input id="rdP" type="number" inputmode="numeric" min="1"> まで <button onclick="saveRead()">記録</button>
       <button class="undo" onclick="clearRead()">取り消し</button>
@@ -349,7 +349,7 @@ body.incard header{display:none}
       <button class="mbtn resume" id="btnResume" onclick="resume()" style="display:none">▶ 続きから
         <small id="resumeN"></small></button>
       <button class="mbtn" id="btnRev" onclick="start('review')">復習優先出題
-        <small><span id="dueN">0</span>問が復習期限に達しています</small></button>
+        <small><span id="dueN">0</span>問が復習期限に達しています。重みの高い順に全部出します</small></button>
       <button class="mbtn" id="btnNew" onclick="start('new')">未出題から
         <small id="newN"></small></button>
       <button class="mbtn" id="btnPerf" onclick="start('perfect')">完璧の確認テスト
@@ -467,18 +467,19 @@ body.incard header{display:none}
    問題は冊ごとに data/q<冊番号>.json（{chs:章の一覧, q:問題}）。選んだ冊のファイルだけを読み込む。
    ⑩は今の記録を残すため、名札（id）・手元の保存先・Firebase の置き場所を旧来のまま使う。
    2027年版に切り替えるときに、名札を付け直し、置き場所を drill_10 に移す（そのとき旧記録の扱いを決める）。
-   ①〜⑨は名札に冊の番号を入れる（01-o001）。ready が false の冊は選べない。 */
+   ①〜⑨は名札に冊の番号を入れる（01-o001）。ready が false の冊は選べない。
+   画面では「問題集」と呼び、ボタンには ab（略称・2026-10-27 木下氏）を出す。 */
 const BOOKS=[
-  {no:'01',mark:'①',name:'労働基準法',tag:'労働基準法',ed:'2027',ready:true},
-  {no:'02',mark:'②',name:'労働安全衛生法',tag:'労働安全衛生法',ed:'2027',ready:true},
-  {no:'03',mark:'③',name:'労働者災害補償保険法',tag:'労災保険法',ed:'2027'},
-  {no:'04',mark:'④',name:'雇用保険法',tag:'雇用保険法',ed:'2027'},
-  {no:'05',mark:'⑤',name:'労働保険徴収法',tag:'徴収法',ed:'2026'},
-  {no:'06',mark:'⑥',name:'健康保険法',tag:'健康保険法',ed:'2026'},
-  {no:'07',mark:'⑦',name:'国民年金法',tag:'国民年金法',ed:'2026'},
-  {no:'08',mark:'⑧',name:'厚生年金保険法',tag:'厚生年金保険法',ed:'2026'},
-  {no:'09',mark:'⑨',name:'労務管理その他の労働に関する一般常識',tag:'労働一般常識',ed:'2026'},
-  {no:'10',mark:'⑩',name:'社会保険に関する一般常識',tag:'社会一般常識',ed:'2026',ready:true,
+  {no:'01',mark:'①',ab:'労基法',name:'労働基準法',tag:'労働基準法',ed:'2027',ready:true},
+  {no:'02',mark:'②',ab:'安衛法',name:'労働安全衛生法',tag:'労働安全衛生法',ed:'2027',ready:true},
+  {no:'03',mark:'③',ab:'労災法',name:'労働者災害補償保険法',tag:'労災保険法',ed:'2027'},
+  {no:'04',mark:'④',ab:'雇保法',name:'雇用保険法',tag:'雇用保険法',ed:'2027'},
+  {no:'05',mark:'⑤',ab:'徴収法',name:'労働保険徴収法',tag:'徴収法',ed:'2026'},
+  {no:'06',mark:'⑥',ab:'健保法',name:'健康保険法',tag:'健康保険法',ed:'2026'},
+  {no:'07',mark:'⑦',ab:'国年法',name:'国民年金法',tag:'国民年金法',ed:'2026'},
+  {no:'08',mark:'⑧',ab:'厚年法',name:'厚生年金保険法',tag:'厚生年金保険法',ed:'2026'},
+  {no:'09',mark:'⑨',ab:'労一',name:'労務管理その他の労働に関する一般常識',tag:'労働一般常識',ed:'2026'},
+  {no:'10',mark:'⑩',ab:'社一',name:'社会保険に関する一般常識',tag:'社会一般常識',ed:'2026',ready:true,
    key:'dd_shaichi_ch12_v1',field:'shaichi_ch12'},
 ].map(b=>({key:'dd_drill_'+b.no+'_v1', field:'drill_'+b.no, ...b}));
 /* 版ごとの、Obsidian のファイル名とページの探し方。
@@ -490,21 +491,30 @@ const EDS={
   '2026v2':{file:b=>'2026v2_'+b.mark+'基礎講座_'+b.name, jump:'block'},
   '2027':  {file:b=>'2027_'+b.mark+'基礎講座_'+b.name, jump:'block'},
 };
+/* 全体（2026-10-27 木下氏）。問題のある問題集をすべて合わせて出す。章の範囲は選ばない。
+   記録は問題集ごとの置き場所（手元・Firebase）のまま持ち、答えた問題の問題集の記録に書く（全体用の記録は作らない）。
+   読んだページの制限は、問題ごとにその問題集の記録で効かせる。 */
+const ALL_BOOK={no:'all',mark:'',ab:'全体',name:'全体',tag:'全体',ed:'',ready:true,key:'dd_drill_all_v1'};
 const BOOK_KEY='drill_book';            // いま選んでいる冊（端末ごとに覚える）
 function pickBook(){
-  const u=(location.search.match(/[?&]b=(\d{1,2})/)||[])[1];
-  let no=u?u.padStart(2,'0'):'';
+  const u=(location.search.match(/[?&]b=(\d{1,2}|all)/)||[])[1];
+  let no=u?(u==='all'?u:u.padStart(2,'0')):'';
   if(!no){ try{ no=localStorage.getItem(BOOK_KEY)||''; }catch(e){} }
+  if(no==='all') return ALL_BOOK;
   const b=BOOKS.find(x=>x.no===no&&x.ready);
   return b||BOOKS.find(x=>x.no==='10');
 }
 const BOOK=pickBook();
+const ALL=BOOK===ALL_BOOK;
+const LB=ALL?BOOKS.filter(b=>b.ready):[BOOK];   // 読み込む問題集（全体のときは問題のある問題集すべて）
+const BK={}; BOOKS.forEach(b=>BK[b.no]=b);
+let IDB={};                                      // 問題の名札→問題集の番号（全体のとき、記録の置き場所を引く）
 try{ localStorage.setItem(BOOK_KEY,BOOK.no); }catch(e){}
 let Q=[], CHS=[], YKS={};   // YKS: 横断の比較（論点の名前→{t,r}）                       // 問題と章の一覧。loadBook() で読み込む
 /* 版スタンプ。VER は「この行を伏せたファイル内容」の sha256 先頭8桁で、
    npm test（scripts/version-stamp.mjs）が一致を強制する。
    内容を変えれば必ず変わるので、画面の値を見れば新旧を判別できる。 */
-const VER='c3291ea7';
+const VER='f7d7c697';
 const KEY=BOOK.key;                    // 手元の記録の保存先（冊ごと）
 const LV=['未学習','要復習','不安あり','覚えた','完璧'];
 const LVC=['#64748b','#ef4444','#eab308','#22c55e','#3b82f6'];
@@ -518,7 +528,7 @@ const DAY_SHIFT_H=3;
 function dayD(ms){ return new Date((ms==null?Date.now():ms)-DAY_SHIFT_H*3600000); }   // 区切りをずらした日時
 function ymd(d){ return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); }
 function today(){ return ymd(dayD()); }
-function loadS(){try{return JSON.parse(localStorage.getItem(KEY))||{p:{},day:'',n:0};}catch(e){return {p:{},day:'',n:0};}}
+function loadS(key){try{return JSON.parse(localStorage.getItem(key))||{p:{},day:'',n:0};}catch(e){return {p:{},day:'',n:0};}}
 const LOG_KEEP_DAYS=180;   // 日別ログの保持期間
 function pruneLog(o){
   if(!o) return {};
@@ -527,23 +537,34 @@ function pruneLog(o){
   return o;
 }
 function saveS(){
-  try{localStorage.setItem(KEY,JSON.stringify(S));}
-  catch(e){ if(typeof lg==='function') lg('save_fail',String(e).slice(0,60)); }
+  for(const b of LB){
+    try{localStorage.setItem(b.key,JSON.stringify(SB[b.no]));}
+    catch(e){ if(typeof lg==='function') lg('save_fail',String(e).slice(0,60)); }
+  }
   if(typeof schedulePush==='function') schedulePush();
 }
-let S=loadS();
-/* daily（日付→解答数）と log（日付→秒）は総合版と同じ形。
+/* 問題集ごとの記録。1冊のときは S がその冊の記録。全体のときは S を使わず、問題ごとに stOf(id) で引く。
+   daily（日付→解答数）と log（日付→秒）は総合版と同じ形。
    n/t は日付が変わると 0 に戻るため、確定した日の値をここに残す。
    GitHub Actions の delta-study-sync がこれを読んで app history log に書き出す。 */
-if(!S.daily||typeof S.daily!=='object') S.daily={};
-if(!S.log||typeof S.log!=='object') S.log={};
 /* 読んだページ（2026-10-22 木下氏）。日付→{p:その日に読み終えたページ, at:記録した時刻}。
    日付はアプリ全体と同じ 3:00 区切り。同期で sync/{code}.<冊のフィールド>.read に載り、
    毎晩の delta-study の同期が学習記録（実績・current_position）に写す。
    出題は、記録のうちいちばん先のページまでに絞る。 */
-if(!S.read||typeof S.read!=='object') S.read={};
+function normS(s){
+  if(!s.p||typeof s.p!=='object') s.p={};
+  if(!s.daily||typeof s.daily!=='object') s.daily={};
+  if(!s.log||typeof s.log!=='object') s.log={};
+  if(!s.read||typeof s.read!=='object') s.read={};
+  return s;
+}
+const SB={};
+for(const b of LB) SB[b.no]=normS(loadS(b.key));
+let S=ALL?null:SB[BOOK.no];
+function stOf(id){ return ALL ? (SB[IDB[id]]||{p:{}}) : S; }
+function rec(id){ return stOf(id).p[id]; }
 function readDay(back){ const d=dayD(); d.setDate(d.getDate()-(back||0)); return ymd(d); }
-function readMax(){ let m=0; for(const k in S.read) m=Math.max(m,(S.read[k]||{}).p||0); return m; }
+function readMax(no){ const s=(no&&SB[no])||S; let m=0; for(const k in s.read) m=Math.max(m,(s.read[k]||{}).p||0); return m; }
 function saveRead(){
   const el=document.getElementById('rdP'), v=parseInt(el.value,10);
   if(!(v>0)){ alert('読み終えたページを数字で入れてください'); return; }
@@ -567,32 +588,33 @@ function clearRead(){
 /* 日付の切り替え。以前は開いたときだけ確かめていたため、前の日から開いたままの画面で
    翌朝解くと、その分が前の日に足され、開き直すと今日が0問になった（2026-10-17 iPad）。
    いまは開いたとき・答えるとき・画面に戻ったときに確かめる。 */
-function rollDay(){
-  if(S.day===today()) return false;
-  if(S.day && S.n>0){   // 日付が変わる前に、その日の値を確定させる
-    S.daily[S.day]=Math.max(S.daily[S.day]||0,S.n);
-    S.log[S.day]=Math.max(S.log[S.day]||0,S.t||0);
+function rollDay(){ let ch=false; for(const no in SB) if(rollDay1(SB[no])) ch=true; return ch; }
+function rollDay1(s){
+  if(s.day===today()) return false;
+  if(s.day && s.n>0){   // 日付が変わる前に、その日の値を確定させる
+    s.daily[s.day]=Math.max(s.daily[s.day]||0,s.n);
+    s.log[s.day]=Math.max(s.log[s.day]||0,s.t||0);
   }
-  pruneLog(S.daily); pruneLog(S.log);
-  S.day=today(); S.n=0; S.t=0;
-  fixTodayN();
+  pruneLog(s.daily); pruneLog(s.log);
+  s.day=today(); s.n=0; s.t=0;
+  fixTodayN1(s);
   return true;
 }
 /* 今日の数を、問題ごとの答えた日（hd）から数え直し、少なければ引き上げる。
    上の不具合で前の日に回った今朝の分を戻すため。今日更新した問題の hd のうち今日の日付の回を数える。
    学習時間（秒）は問題ごとに持っていないので戻せない。 */
-function fixTodayN(){
+function fixTodayN(){ let ch=false; for(const no in SB) if(fixTodayN1(SB[no])) ch=true; return ch; }
+function fixTodayN1(s){
   const md=mmdd(), td=today(); let c=0;
-  for(const id in S.p){
-    const r=S.p[id]; if(!r||!r.at||typeof r.hd!=='string') continue;
+  for(const id in s.p){
+    const r=s.p[id]; if(!r||!r.at||typeof r.hd!=='string') continue;
     if(ymd(dayD(new Date(r.at).getTime()))!==td) continue;
     for(let k=0;k<r.hd.length;k+=4) if(r.hd.slice(k,k+4)===md) c++;
   }
-  if(c>S.n){ S.n=c; S.daily[S.day]=Math.max(S.daily[S.day]||0,c); return true; }
+  if(c>s.n){ s.n=c; s.daily[s.day]=Math.max(s.daily[s.day]||0,c); return true; }
   return false;
 }
-pruneLog(S.daily); pruneLog(S.log);
-if(typeof S.t!=='number') S.t=0;
+for(const no in SB){ const s=SB[no]; pruneLog(s.daily); pruneLog(s.log); if(typeof s.t!=='number') s.t=0; }
 if(rollDay()|fixTodayN()) saveS();
 document.addEventListener('visibilitychange',()=>{ if(document.visibilityState==='visible' && rollDay()){ saveS(); if(typeof renderHome==='function' && document.getElementById('home').style.display!=='none') renderHome(); } });
 
@@ -611,7 +633,8 @@ function creditExp(){
   const add=Math.min(qActive(),MAX_Q_SEC)-qCredited;
   if(add<=0) return;
   rollDay();
-  qCredited+=add; S.t+=add; S.log[S.day]=Math.max(S.log[S.day]||0,S.t);
+  const s=cur?stOf(cur.id):S; if(!s) return;
+  qCredited+=add; s.t+=add; s.log[s.day]=Math.max(s.log[s.day]||0,s.t);
   saveS();
 }
 document.addEventListener('visibilitychange',()=>{
@@ -641,8 +664,7 @@ function stopTimer(){
 }
 
 /* ===== Obsidian 連携（総合版と同じ localStorage キーを共有） ===== */
-const ED=EDS[BOOK.ed];
-const OBS_LABEL=ED.file(BOOK);          // いまの冊・版の教材のファイル名
+function obsLabel(b){ return EDS[b.ed].file(b); }   // その冊・版の教材のファイル名（全体では問題ごとに冊が変わる）
 const OBS_DIAG_LABEL=EDS['2026'].file(BOOKS.find(x=>x.no==='10'));   // 切り分けは、見出しで飛べる⑩の 2026年版で試す
 function obsVault(){try{return localStorage.getItem('obsidian_vault')||'';}catch(e){return '';}}
 /* テキストの置き場所（2026-10-13〜）。保管庫の sharoshi/2026/ に、教材の 2026年版がある（ページの区切りが見出しなので、そのページへ飛べる）。
@@ -658,22 +680,23 @@ function saveObs(){
 function setObsMode(m){try{localStorage.setItem('obsidian_mode',m);}catch(e){} renderHome();}
 /* フォルダの設定が版の名前（2026・2026v2・2027）で終わっていれば、いまの冊の版のフォルダに読み替える。
    設定は1つのまま、冊ごとに sharoshi/2026・sharoshi/2027 などを開けるようにするため。 */
-function obsEdFolder(){ return obsFolder().replace(/(^|\/)(2026v2|2026|2027)$/,'$1'+BOOK.ed); }
-function obsHref(page){
+function obsEdFolder(b){ return obsFolder().replace(/(^|\/)(2026v2|2026|2027)$/,'$1'+b.ed); }
+function obsHref(page,b){
   const v=obsVault(), vp=v?('vault='+encodeURIComponent(v)+'&'):'';
-  if(obsMode()==='adv' && ED.jump==='heading'){
-    const f=obsEdFolder(), fp=(f?f+'/':'')+OBS_LABEL;
+  const lb=obsLabel(b), jp=EDS[b.ed].jump;
+  if(obsMode()==='adv' && jp==='heading'){
+    const f=obsEdFolder(b), fp=(f?f+'/':'')+lb;
     return 'obsidian://advanced-uri?'+vp+'filepath='+encodeURIComponent(fp)
-      +'&heading='+encodeURIComponent('【'+OBS_LABEL+' p.'+page+'】');
+      +'&heading='+encodeURIComponent('【'+lb+' p.'+page+'】');
   }
-  if(obsMode()==='adv' && ED.jump==='block'){   // ページの区切りの行の末尾の ^pN へ飛ぶ
-    const f=obsEdFolder(), fp=(f?f+'/':'')+OBS_LABEL+'.md';
+  if(obsMode()==='adv' && jp==='block'){   // ページの区切りの行の末尾の ^pN へ飛ぶ
+    const f=obsEdFolder(b), fp=(f?f+'/':'')+lb+'.md';
     return 'obsidian://advanced-uri?'+vp+'filepath='+encodeURIComponent(fp)+'&block=p'+page;
   }
-  return 'obsidian://search?'+vp+'query='+encodeURIComponent('"'+OBS_LABEL+' p.'+page+'"');
+  return 'obsidian://search?'+vp+'query='+encodeURIComponent('"'+lb+' p.'+page+'"');
 }
-function refLine(page){
-  return '<a class="reflink" href="'+obsHref(page)+'">📖 '+OBS_LABEL+' P.'+page+' ↗</a>';
+function refLine(page,b){
+  return '<a class="reflink" href="'+obsHref(page,b)+'">📖 '+obsLabel(b)+' P.'+page+' ↗</a>';
 }
 /* ジャンプが効かないときの切り分け。
    「開かない」としか分からないと手の打ちようがないので、
@@ -711,15 +734,15 @@ function obsDiag(){
   el.innerHTML=h; el.style.display='block';
 }
 
-function box(id){return (S.p[id]&&S.p[id].b)||0;}
+function box(id){const r=rec(id); return (r&&r.b)||0;}
 /* 各問題の直近10回の成否。'1'=正解 '0'=不正解 を古い順に並べた文字列で持つ。
    文字列にしているのは Firestore へそのまま載せるため（配列より軽く、マージも単純）。 */
 const HN=10;
-function hist(id){ const h=(S.p[id]&&S.p[id].h)||''; return typeof h==='string'?h:''; }
+function hist(id){ const r=rec(id), h=(r&&r.h)||''; return typeof h==='string'?h:''; }
 function pushHist(id,ok){ return (hist(id)+(ok?'1':'0')).slice(-HN); }
 /* 各回の答えた日（2026-10-12〜）。'MMDD' を4文字ずつ古い順につなぎ、h の末尾とそろえて持つ。
    これより前の回には日付が無いので、hd は h より短いことがある（表示では日付なしで出す）。 */
-function histD(id){ const d=(S.p[id]&&S.p[id].hd)||''; return typeof d==='string'?d:''; }
+function histD(id){ const r=rec(id), d=(r&&r.hd)||''; return typeof d==='string'?d:''; }
 function mmdd(){ const d=dayD(); return String(d.getMonth()+1).padStart(2,'0')+String(d.getDate()).padStart(2,'0'); }
 function pushHistD(id){ return (histD(id)+mmdd()).slice(-HN*4); }
 /* 誤答率。直近ほど重くする（10回中いちばん新しい回が最も効く）。
@@ -740,7 +763,7 @@ function wrongRate(id){
 const GAP_DAYS=[0,1,1,3,7];                   // 目安日数: 未学習・要復習・不安あり・覚えた・完璧
 const LVW=[0,60,40,20,0];                     // 定着度の補助の重み
 function daysSince(id){
-  const r=S.p[id]; if(!r||!r.at) return null;
+  const r=rec(id); if(!r||!r.at) return null;
   const a=dayD(new Date(r.at).getTime()), now=dayD();
   const d0=new Date(a.getFullYear(),a.getMonth(),a.getDate()), d1=new Date(now.getFullYear(),now.getMonth(),now.getDate());
   return Math.round((d1-d0)/86400000);        // 日数の差（3:00 区切り。今日答えた＝0）
@@ -758,7 +781,7 @@ function priority(id){
   return s;                                           // 同点のばらしは byPriority の揺らぎ（±8）で行う
 }
 function due(id){
-  const r=S.p[id]; if(!r) return true;            // 未学習は常に対象
+  const r=rec(id); if(!r) return true;            // 未学習は常に対象
   if(daysSince(id)===0) return false;              // 今日答えた問題は出さない（同じ日に繰り返さない）
   if(r.b<=1) return true;                          // 要復習は翌日から
   const d=new Date(r.at); d.setDate(d.getDate()+IV[r.b]);
@@ -792,8 +815,8 @@ const RKEY='range_'+BOOK.no;
 let RANGE=new Set((()=>{ try{ return JSON.parse(localStorage.getItem(RKEY)||'[]'); }catch(e){ return []; } })());
 function saveRange(){ try{ localStorage.setItem(RKEY,JSON.stringify([...RANGE])); }catch(e){} }
 function inRange(q){
-  const m=readMax(); if(m && q.page>m) return false;   // 読んだページより後ろは出さない
-  return !RANGE.size || RANGE.has(q.ch);
+  const m=readMax(q._b); if(m && q.page>m) return false;   // 読んだページより後ろは出さない（その問題の問題集の記録で）
+  return ALL || !RANGE.size || RANGE.has(q.ch);
 }
 function QR(){ return QA().filter(inRange); }
 function toggleCh(n){ RANGE.has(n)?RANGE.delete(n):RANGE.add(n); saveRange(); renderHome(); }
@@ -808,9 +831,10 @@ function dueList(){return QD().filter(q=>box(q.id)>0&&due(q.id)&&!waitPerfect(q.
    ほかの冊の今日の数は、この端末の記録とクラウドの記録の大きい方を採る（端末をまたいで二重に数えない）。 */
 let remoteAll=null;                     // クラウドの doc 全体（ほかの冊の今日の数を読むため）
 function todayAll(){
-  let n=S.n, t=S.t;
+  let n=0, t=0;
   for(const b of BOOKS){
-    if(b.no===BOOK.no) continue;
+    const s=SB[b.no];
+    if(s){ n+=s.n||0; t+=s.t||0; continue; }   // 読み込んでいる問題集（クラウドの分は同期で取り込み済み）
     let ln=0, lt=0, rn=0, rt=0;
     try{ const o=JSON.parse(localStorage.getItem(b.key)||'null'); if(o&&o.day===today()){ ln=o.n||0; lt=o.t||0; } }catch(e){}
     const r=remoteAll&&remoteAll[b.field];
@@ -829,9 +853,9 @@ function setBook(no){
 }
 function renderHome(){
   document.body.classList.remove('incard');
-  document.getElementById('books').innerHTML=BOOKS.map(b=>
-    `<button class="${b.no===BOOK.no?'on':''}" ${b.ready?'':'disabled'} title="${b.mark}${b.name}" onclick="setBook('${b.no}')">${b.mark}</button>`).join('');
-  document.getElementById('bookName').textContent=`${BOOK.mark}${BOOK.name}（${BOOK.ed}年版）`;
+  document.getElementById('books').innerHTML=[ALL_BOOK,...BOOKS].map(b=>
+    `<button class="${b.no===BOOK.no?'on':''}" ${b.ready?'':'disabled'} title="${b.mark}${b.name}" onclick="setBook('${b.no}')">${b.mark}${b.ab}</button>`).join('');
+  document.getElementById('bookName').textContent=ALL ? `全体（${LB.map(b=>b.mark).join('')}の合算）` : `${BOOK.mark}${BOOK.name}（${BOOK.ed}年版）`;
   const c=counts(), tot=QS().length||1;
   const pct=QS().reduce((a,q)=>a+W[box(q.id)],0)/tot*100;
   document.getElementById('progPct').textContent=pct.toFixed(1)+'%';
@@ -846,7 +870,7 @@ function renderHome(){
   document.getElementById('tstat').innerHTML = (ta.n
     ? `学習時間 <b>${fmt(ta.t)}</b>　1問あたり <b>${fmt(ta.t/ta.n)}</b>`
     : '学習時間 <b>0秒</b>')
-    + (ta.n!==S.n ? `<br>全冊の合計（${BOOK.mark}は ${S.n}問）` : '');
+    + (!ALL && ta.n!==S.n ? `<br>全問題集の合計（${BOOK.mark}は ${S.n}問）` : '');
   const dn=dueList().length;
   document.getElementById('dueN').textContent=dn;
   document.getElementById('btnRev').disabled = dn===0;
@@ -869,6 +893,15 @@ function renderHome(){
       +`<small>${qs.length}問・定着${p.toFixed(0)}%${un?`・未${un}`:''}</small><span class="mb" style="--p:${Math.max(p,1.5).toFixed(1)}%"></span></button>`;
   }).join('');
   document.getElementById('allN').innerHTML=`定着度に関係なく全${QR().length}問`;
+  /* 全体のときは、範囲を選ぶボタン・章の一覧・読んだページの入力を出さない（読んだページは問題集を選んで入れる） */
+  document.getElementById('rdRow').style.display=ALL?'none':'';
+  document.getElementById('chlist').style.display=ALL?'none':'';
+  document.querySelectorAll('.rangehd button').forEach(e=>e.style.display=ALL?'none':'');
+  if(ALL){
+    const rd=LB.filter(b=>readMax(b.no)).map(b=>b.mark+'p.'+readMax(b.no));
+    document.getElementById('rangeN').textContent=`${LB.map(b=>b.mark).join('')}の全章（${QR().length}問）`
+      + (rd.length ? `　読んだページまで（${rd.join('・')}）` : '');
+  }else{
   const sel=CHS.filter(c=>RANGE.has(c.n)).map(c=>c.n+'章');
   const avail=CHS.filter(c=>QA().some(q=>q.ch===c.n)).length;
   const rm=readMax(); document.getElementById('rdBook').textContent=BOOK.mark+BOOK.tag;
@@ -878,8 +911,9 @@ function renderHome(){
     document.getElementById('rdNow').textContent = rm
       ? `いま：p.${rm} まで（${+last.slice(5,7)}/${+last.slice(8,10)} 記録）。これより後ろのページの問題は出しません`
       : 'まだ記録がありません（全ページから出します）'; }
+  }
   const qo=QS().filter(q=>q.t==='ox').length, qn=QS().filter(q=>q.t==='sen').length;
-  document.getElementById('qsum').textContent=`${BOOK.mark}${BOOK.tag}　○× ${qo}問／選択式 ${qn}問・計${qo+qn}問（出題セット）`;
+  document.getElementById('qsum').textContent=`${ALL?'全体':BOOK.mark+BOOK.tag}　○× ${qo}問／選択式 ${qn}問・計${qo+qn}問（出題セット）`;
   document.getElementById('tyOx').className=(typeOn('ox')?'on':'');
   document.getElementById('tySen').className=(typeOn('sen')?'on':'');
   const rs=loadSession(), rb=document.getElementById('btnResume');
@@ -910,17 +944,17 @@ function renderHome(){
 
 /* ===== Firebase 同期（総合版と同じ sync_code・同じ doc の別フィールドを使う） =====
    総合版は sync/{code} の perQ / log / excluded / daily を使う。
-   本ドリルは同じ doc の、いま選んでいる冊のフィールド（⑩は shaichi_ch12、①〜は drill_<冊>）だけを {merge:true} で書くため、
+   本ドリルは同じ doc の、いま選んでいる冊のフィールド（⑩は shaichi_ch12、①〜は drill_<冊>。全体のときは問題のある冊すべて）だけを {merge:true} で書くため、
    総合版やほかの冊のデータには一切触れない。読むときは doc 全体を受け取り、ほかの冊の今日の数を合計に使う。 */
 const FBCFG={apiKey:"AIzaSyAdU1F-JtSC4j-wvqbaUJGTIosW6mOkEck",authDomain:"sharoushi-quiz-73790.firebaseapp.com",projectId:"sharoushi-quiz-73790",storageBucket:"sharoushi-quiz-73790.firebasestorage.app",messagingSenderId:"859893882829",appId:"1:859893882829:web:b2d05225c3c7acf6612e84"};
-const FIELD=BOOK.field;                 // Firebase の置き場所（冊ごと。⑩は shaichi_ch12）
 /* var にしている理由：日付が変わって最初に開いたとき、起動処理の saveS() → schedulePush() がこの行より先に走る。
    let だと宣言前の参照で例外になり、スクリプトが止まってボタンが効かなくなる（2026-10-12 確認）。 */
 var fbReady=false, syncDoc=null, unsub=null, pushTimer=null, applyingRemote=false;
 /* 初回スナップショットを受け取るまでは絶対に push しない。
    受け取る前に push すると、この端末の空の記録がクラウド側の記録を上書きして消す。 */
-let firstSnap=false, remoteN=0, allowEmptyPush=false, remoteDiag=null;
-let lastPushed='', snapN=0;      // lastPushed: 直前に送った内容 / snapN: スナップショット受信数
+let firstSnap=false, remoteN=0, remoteNB={}, allowEmptyPush=false, remoteDiag=null;   // remoteNB: 冊ごとのクラウドの問題数
+let lastPushed={}, snapN=0;      // lastPushed: 冊ごとの直前に送った内容 / snapN: スナップショット受信数
+function nLocal(){ let n=0; for(const no in SB) n+=nP(SB[no].p); return n; }
 function nP(o){ return o?Object.keys(o).length:0; }
 function syncCode(){try{return localStorage.getItem('sync_code')||'';}catch(e){return '';}}
 /* 同期コードを URL からも受け取る。
@@ -1002,7 +1036,7 @@ function initFB(){
 }
 function connectSync(){
   if(unsub){ unsub(); unsub=null; }
-  firstSnap=false; remoteN=0; lastPushed=''; snapN=0;
+  firstSnap=false; remoteN=0; remoteNB={}; lastPushed={}; snapN=0;
   if(!fbReady){   // ログイン待ち。15秒を過ぎていれば、つながらない旨をそのまま出す
     if(fbT0 && Date.now()-fbT0>=FB_WAIT_MS) fbWaitMsg();
     else setSt('Firebase に接続中…（つながったら自動で同期を始めます）','');
@@ -1022,18 +1056,23 @@ function connectSync(){
     lg('sync_connect',{code:code.length});
     unsub=syncDoc.onSnapshot(snap=>{
       remoteAll=(snap.exists && snap.data()) || null;
-      const d=(remoteAll && remoteAll[FIELD]) || null;
-      remoteN=nP(d&&d.p);
+      remoteN=0; remoteNB={};
+      let changed=false;
+      for(const b of LB){
+        const d=(remoteAll && remoteAll[b.field]) || null;
+        remoteNB[b.no]=nP(d&&d.p); remoteN+=remoteNB[b.no];
+        if(d && mergeRemote(SB[b.no],d)) changed=true;
+      }
       const wasFirst=!firstSnap;
-      const changed = (d ? mergeRemote(d) : false) | fixTodayN();
+      if(fixTodayN()) changed=true;
       firstSnap=true;
       snapN++;
       // 記録するのは初回と、実際に取り込みが起きたときだけ。毎回書くとログが埋まる
-      if(wasFirst||changed) lg('snapshot',{remote:remoteN, local:nP(S.p), first:wasFirst, changed:changed});
+      if(wasFirst||changed) lg('snapshot',{remote:remoteN, local:nLocal(), first:wasFirst, changed:changed});
       else if(snapN===20) lg('snapshot_storm',{n:snapN});   // 想定外に多いときだけ1度警告                       // ここで初めて push を解禁する
       if(changed) saveS();
       if(document.getElementById('home').style.display!=='none') renderHome();   // ほかの冊の今日の数も変わりうる
-      setSt(`● 同期中（クラウド ${remoteN}問 / この端末 ${nP(S.p)}問）`,'ok');
+      setSt(`● 同期中（クラウド ${remoteN}問 / この端末 ${nLocal()}問）`,'ok');
       /* ここで pushNow() を呼ばない。
          送信内容には ts が入るため必ず「変更」となり、スナップショットが返ってきて
          また送信する——という無限ループになっていた（旧版から存在した不具合）。
@@ -1047,7 +1086,7 @@ function connectSync(){
 }
 /* 問題ごとに at（最終更新時刻）が新しい方を採る。
    間違えて要復習へ落ちた記録も正しく伝播する（段階の大小では判定しない） */
-function mergeRemote(d){
+function mergeRemote(S,d){   // S はその冊の記録
   let ch=false;
   if(d.diag&&Array.isArray(d.diag)) remoteDiag=d.diag;
   if(d.p) for(const id in d.p){
@@ -1080,20 +1119,26 @@ function pushNow(){
   if(!firstSnap) return;                    // クラウドを読む前に書かない
   /* 保護: この端末が空でクラウドに記録があるときは送らない（消さない）。
      「学習記録をリセット」を押したときだけ、その1回に限り空の送信を許す。 */
-  if(nP(S.p)===0 && remoteN>0 && !allowEmptyPush){
-    lg('push_blocked',{remote:remoteN});
-    setSt(`● 同期中（保護: この端末は空のため、クラウドの ${remoteN}問 を上書きしません）`,'ok');
-    return;
-  }
-  allowEmptyPush=false;
+  const out={}; let np=0, nn=0;
+  for(const b of LB){
+    const s=SB[b.no], rn=remoteNB[b.no]||0;
+    if(nP(s.p)===0 && rn>0 && !allowEmptyPush){
+      lg('push_blocked',{b:b.no,remote:rn});
+      setSt(`● 同期中（保護: この端末の${b.mark}は空のため、クラウドの ${rn}問 を上書きしません）`,'ok');
+      continue;
+    }
   /* 学習記録の中身が前回と同じなら送らない。
      ループが再発しても、ここで必ず止まる。診断ログは変化判定に入れない
      （ログが増えただけで送信が起きると、それ自体がループの燃料になる）。 */
-  const body=JSON.stringify({p:S.p, day:S.day, n:S.n, t:S.t, daily:S.daily, log:S.log, read:S.read});
-  if(body===lastPushed) return;
-  lastPushed=body;
-  try{ syncDoc.set({[FIELD]:{p:S.p, day:S.day, n:S.n, t:S.t, daily:S.daily, log:S.log, read:S.read,
-       diag:readLog().slice(-60), ts:Date.now()}},{merge:true}); lg('push',{p:nP(S.p),n:S.n}); }
+    const body=JSON.stringify({p:s.p, day:s.day, n:s.n, t:s.t, daily:s.daily, log:s.log, read:s.read});
+    if(body===lastPushed[b.no]) continue;
+    lastPushed[b.no]=body;
+    out[b.field]={p:s.p, day:s.day, n:s.n, t:s.t, daily:s.daily, log:s.log, read:s.read, diag:readLog().slice(-60), ts:Date.now()};
+    np+=nP(s.p); nn+=s.n||0;
+  }
+  allowEmptyPush=false;
+  if(!Object.keys(out).length) return;
+  try{ syncDoc.set(out,{merge:true}); lg('push',{p:np,n:nn,f:Object.keys(out).length}); }
   catch(e){ lg('push_fail',String(e).slice(0,60)); }
 }
 function schedulePush(){ if(!syncDoc) return; clearTimeout(pushTimer); pushTimer=setTimeout(pushNow,1500); }
@@ -1107,11 +1152,13 @@ window.addEventListener('blur',flushPush);
 
 /* ===== バックアップ ===== */
 function bkExport(){
+  if(ALL){ alert('バックアップは、問題集を1つ選んでから使ってください'); return; }
   document.getElementById('bk').value=JSON.stringify(S);
   document.getElementById('bkmsg').textContent='書き出しました。全文をコピーして保管してください。';
 }
 function bkImport(merge){
   const el=document.getElementById('bk'), msg=document.getElementById('bkmsg');
+  if(ALL){ alert('バックアップは、問題集を1つ選んでから使ってください'); return; }
   let d; try{ d=JSON.parse(el.value); }catch(e){ msg.textContent='読み込めません（形式が不正です）'; return; }
   if(!d||typeof d!=='object'||typeof d.p!=='object'){ msg.textContent='読み込めません（学習記録が入っていません）'; return; }
   if(merge){
@@ -1124,7 +1171,7 @@ function bkImport(merge){
     msg.textContent=`統合しました（新規${add}件・更新${upd}件）`;
   }else{
     if(!confirm('この端末の記録を、貼り付けた内容で置き換えます。よろしいですか？')) return;
-    S={p:d.p, day:today(), n:d.day===today()?(d.n||0):0, t:d.day===today()?(d.t||0):0, daily:d.daily||{}, log:d.log||{}, read:S.read};
+    S=SB[BOOK.no]={p:d.p, day:today(), n:d.day===today()?(d.n||0):0, t:d.day===today()?(d.t||0):0, daily:d.daily||{}, log:d.log||{}, read:S.read};
     msg.textContent='置き換えました。';
   }
   saveS(); renderHome();
@@ -1241,7 +1288,7 @@ function start(mode){
   else if(mode==='all') pool=shuffle(QR().slice()); // 全問を通しでは完璧も含める（範囲の中で）
   else if(mode==='perfect')                         // 完璧の確認テスト: 前回から間があいている順
     pool=perfectList().map(q=>({q:q,g:daysSince(q.id)})).sort((a,b)=>(b.g===null?1e9:b.g)-(a.g===null?1e9:a.g)).map(x=>x.q).slice(0,GOAL);
-  else if(mode==='review') pool=shuffle(dueList());
+  else if(mode==='review') pool=byPriority(dueList());   // 復習優先: 期限の来た問題を全部、おまかせと同じ重みの高い順に（2026-10-28 木下氏。全体では問題集をまたいで並ぶ）
   else if(mode==='new')                    // 未出題から: まだ解いていない問題だけ。足りなければその数で終わる（2026-10-17 木下氏）
     pool=shuffle(A.filter(q=>box(q.id)===0)).slice(0,GOAL);
   else pool=byPriority(A.filter(q=>!waitPerfect(q.id))).slice(0,GOAL);   // auto: 優先度順（完璧の手前で7日たたない問題は除く）
@@ -1272,7 +1319,8 @@ function load(){
   document.getElementById('card').classList.remove('done');
   const d=draw(cur); cur._text=d.text; cur._ans=d.ans;
   document.getElementById('lawname').textContent=cur.law; showQToday();
-  document.getElementById('tag').textContent=`${cur.no?cur.no+'　':''}${BOOK.mark}${BOOK.tag}・p.${cur.page}`;
+  const cb=BK[cur._b]||BOOK;
+  document.getElementById('tag').textContent=`${cur.no?cur.no+'　':''}${cb.mark}${cb.tag}・p.${cur.page}`;
   document.getElementById('cnt').textContent=`${idx+1} / ${pool.length}　${LV[box(cur.id)]}`;
   document.getElementById('fb').style.display='none';
   document.getElementById('spot').style.display='none';
@@ -1379,7 +1427,7 @@ function spotPick(k){
    回数は増やさない（同じ1回の答えの扱いを直すだけ）。定着度は不正解と同じく要復習にする。 */
 let lastSec;
 function spotMiss(){
-  const p=S.p[cur.id]; if(!p) return;
+  const p=rec(cur.id); if(!p) return;
   const h=hist(cur.id);
   if(h && h.slice(-1)==='1') p.h=h.slice(0,-1)+'0';
   p.b=1; p.at=new Date().toISOString();
@@ -1437,7 +1485,7 @@ function feedback(ok,correctLabel){
     +(cur.detail?`<div class="detail">${cur.detail}</div>`:'')
     +ykBox(cur)
     +scoreLine(cur)
-    +refLine(cur.page);
+    +refLine(cur.page,BK[cur._b]);
   const sec=stopTimer(); lastSec=sec;
   saveSession();                        // 回答済みであることを残す（中断→再開で同じ問題に戻らない）
   /* 正しく × と答えたときだけ、誤り箇所を問う。
@@ -1481,7 +1529,7 @@ function senOpen(text){
   const n=text.replace(/【(.+?)】/g,(m,g)=>g.split('|')[0]).replace(/\s/g,'').length;
   return Math.max(1, Math.min(SEN_MAX, Math.floor(n/40)));
 }
-function senBh(id,n){ const b=(S.p[id]&&S.p[id].bh)||''; return (typeof b==='string'&&b.length===n)?b:'-'.repeat(n); }
+function senBh(id,n){ const r=rec(id), b=(r&&r.bh)||''; return (typeof b==='string'&&b.length===n)?b:'-'.repeat(n); }
 function senOk(set,ng){
   if(!ng) return true;
   for(const c of ng.both||[]) if(c.every(i=>set.includes(i))) return false;
@@ -1587,16 +1635,17 @@ function nextBox(b,id){
 
 function apply(b,recount,sec,ok){
   if(!recount && rollDay()) saveS();
-  if(!recount) lg('ans',{id:cur.id,b:b,p:Object.keys(S.p).length+1,n:S.n+1,ok:ok?1:0,...(cur.t==='ox'?{s:cur._ans?1:0}:{})});  // s: ○×問題で出した版（1=○の文 0=×の文）
+  const s=stOf(cur.id);   // 答えた問題の問題集の記録に書く
+  if(!recount) lg('ans',{id:cur.id,b:b,p:Object.keys(s.p).length+1,n:s.n+1,ok:ok?1:0,...(cur.t==='ox'?{s:cur._ans?1:0}:{})});  // s: ○×問題で出した版（1=○の文 0=×の文）
   /* 履歴を積むのは実際に答えたときだけ。あとから定着度を付け直しても回数は増やさない。 */
   const h = recount ? hist(cur.id) : pushHist(cur.id,ok);
   const hd = recount ? histD(cur.id) : pushHistD(cur.id);
-  const prev=S.p[cur.id]||{};
+  const prev=s.p[cur.id]||{};
   const bh = (!recount && cur._bhNew) ? cur._bhNew : prev.bh;     // 穴ごとの記録（穴埋めだけ）
-  S.p[cur.id]={b:b,at:new Date().toISOString(),h:h,hd:hd,...(typeof bh==='string'?{bh:bh}:{})};
-  if(!recount){ S.n++; S.t+=(sec||0); }
+  s.p[cur.id]={b:b,at:new Date().toISOString(),h:h,hd:hd,...(typeof bh==='string'?{bh:bh}:{})};
+  if(!recount){ s.n++; s.t+=(sec||0); }
   // 当日分を日別ログにも書く。日付を跨いでアプリを開かなくても記録が残る
-  S.daily[S.day]=S.n; S.log[S.day]=S.t;
+  s.daily[s.day]=s.n; s.log[s.day]=s.t;
   saveS();
   if(!recount) showQToday();
 }
@@ -1674,10 +1723,11 @@ function clearLog(){
   logMem=[]; document.getElementById('bootlog').style.display='none';
 }
 function resetAll(){
-  if(!confirm(`この端末の ${BOOK.mark}${BOOK.name} の学習記録をすべて消します（ほかの冊の記録は残ります）。よろしいですか？`))return;
+  if(ALL){ alert('学習記録のリセットは、問題集を1つ選んでから使ってください'); return; }
+  if(!confirm(`この端末の ${BOOK.mark}${BOOK.name} の学習記録をすべて消します（ほかの問題集の記録は残ります）。よろしいですか？`))return;
   lg('resetAll',{p:Object.keys(S.p).length});    // 明示的なリセット
   allowEmptyPush=true;                      // 意図したリセットなのでクラウドにも反映する
-  S={p:{},day:today(),n:0,t:0,daily:{},log:{},read:S.read};saveS();renderHome();   // 読んだページは学習記録ではないので残す
+  S=SB[BOOK.no]={p:{},day:today(),n:0,t:0,daily:{},log:{},read:S.read};saveS();renderHome();   // 読んだページは学習記録ではないので残す
 }
 (function(){
   let ok=true;
@@ -1690,10 +1740,21 @@ function resetAll(){
       +'解いた内容は残りません。通常のブラウザで開き直してください。';
   }
 })();
-/* 冊の問題を読み込む。?v=版 を付けて、本体と同じ版の問題を必ず読む（古いファイルの使い回しを避ける） */
+/* 冊の問題を読み込む。?v=版 を付けて、本体と同じ版の問題を必ず読む（古いファイルの使い回しを避ける）。
+   全体のときは問題のある冊をすべて読む。問題には冊の番号 _b を付ける。
+   横断の論点の名前は冊どうしで重なることがあるので、全体のときは冊の番号を前に付けて分ける。 */
 function loadBook(){
-  return fetch('data/q'+BOOK.no+'.json?v='+VER).then(r=>{ if(!r.ok) throw new Error('HTTP '+r.status); return r.json(); })
-    .then(d=>{ Q=d.q||[]; CHS=d.chs||[]; YKS=d.yks||{}; lg('book_load',{b:BOOK.no,n:Q.length}); })
+  return Promise.all(LB.map(b=>fetch('data/q'+b.no+'.json?v='+VER).then(r=>{ if(!r.ok) throw new Error('HTTP '+r.status); return r.json(); })))
+    .then(ds=>{
+      Q=[]; IDB={}; YKS={};
+      ds.forEach((d,i)=>{
+        const no=LB[i].no, pre=ALL?no+'|':'';
+        for(const q of d.q||[]){ q._b=no; if(pre&&q.yk) q.yk=pre+q.yk; IDB[q.id]=no; Q.push(q); }
+        for(const k in d.yks||{}) YKS[pre+k]=d.yks[k];
+      });
+      CHS=ALL?[]:(ds[0].chs||[]);
+      lg('book_load',{b:BOOK.no,n:Q.length});
+    })
     .catch(e=>{
       lg('book_load_fail',{b:BOOK.no,m:String(e).slice(0,60)});
       const w=document.getElementById('warn');
