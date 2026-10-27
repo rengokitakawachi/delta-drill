@@ -96,9 +96,9 @@ padding:12px;font-size:14px;text-align:left;cursor:pointer}
 .senmode{display:flex;gap:7px;margin-top:10px}
 .senmode button{flex:1;border:1px solid var(--line);background:var(--card2);color:var(--txt);border-radius:9px;padding:9px 10px;font-size:12px;cursor:pointer}
 .senmode button.on{background:rgba(56,189,248,.2);border-color:var(--acc);color:#bae6fd}
-/* 冊を選ぶ列（2026-10-15）。問題の無い冊は押せない */
+/* 問題集を選ぶ列（2026-10-15。2026-10-27 に略称を付けた）。問題の無い問題集は押せない */
 .books{display:grid;grid-template-columns:repeat(5,1fr);gap:6px}
-.books button{border:1px solid var(--line);background:var(--card2);color:var(--txt);border-radius:9px;padding:8px 0;font-size:17px;cursor:pointer}
+.books button{border:1px solid var(--line);background:var(--card2);color:var(--txt);border-radius:9px;padding:8px 0;font-size:13px;white-space:nowrap;cursor:pointer}
 .books button.on{background:rgba(56,189,248,.2);border-color:var(--acc);color:#bae6fd}
 .books button:disabled{opacity:.3;cursor:default}
 .fb{display:none;margin-top:12px}
@@ -320,7 +320,7 @@ body.incard header{display:none}
 <div id="home">
   <div class="warn" id="warn"></div>
   <div class="panel">
-    <h2>冊 <span class="pct" id="bookName"></span></h2>
+    <h2>問題集 <span class="pct" id="bookName"></span></h2>
     <div class="books" id="books"></div>
   </div>
   <div class="panel">
@@ -467,18 +467,19 @@ body.incard header{display:none}
    問題は冊ごとに data/q<冊番号>.json（{chs:章の一覧, q:問題}）。選んだ冊のファイルだけを読み込む。
    ⑩は今の記録を残すため、名札（id）・手元の保存先・Firebase の置き場所を旧来のまま使う。
    2027年版に切り替えるときに、名札を付け直し、置き場所を drill_10 に移す（そのとき旧記録の扱いを決める）。
-   ①〜⑨は名札に冊の番号を入れる（01-o001）。ready が false の冊は選べない。 */
+   ①〜⑨は名札に冊の番号を入れる（01-o001）。ready が false の冊は選べない。
+   画面では「問題集」と呼び、ボタンには ab（略称・2026-10-27 木下氏）を出す。 */
 const BOOKS=[
-  {no:'01',mark:'①',name:'労働基準法',tag:'労働基準法',ed:'2027',ready:true},
-  {no:'02',mark:'②',name:'労働安全衛生法',tag:'労働安全衛生法',ed:'2027',ready:true},
-  {no:'03',mark:'③',name:'労働者災害補償保険法',tag:'労災保険法',ed:'2027'},
-  {no:'04',mark:'④',name:'雇用保険法',tag:'雇用保険法',ed:'2027'},
-  {no:'05',mark:'⑤',name:'労働保険徴収法',tag:'徴収法',ed:'2026'},
-  {no:'06',mark:'⑥',name:'健康保険法',tag:'健康保険法',ed:'2026'},
-  {no:'07',mark:'⑦',name:'国民年金法',tag:'国民年金法',ed:'2026'},
-  {no:'08',mark:'⑧',name:'厚生年金保険法',tag:'厚生年金保険法',ed:'2026'},
-  {no:'09',mark:'⑨',name:'労務管理その他の労働に関する一般常識',tag:'労働一般常識',ed:'2026'},
-  {no:'10',mark:'⑩',name:'社会保険に関する一般常識',tag:'社会一般常識',ed:'2026',ready:true,
+  {no:'01',mark:'①',ab:'労基法',name:'労働基準法',tag:'労働基準法',ed:'2027',ready:true},
+  {no:'02',mark:'②',ab:'安衛法',name:'労働安全衛生法',tag:'労働安全衛生法',ed:'2027',ready:true},
+  {no:'03',mark:'③',ab:'労災法',name:'労働者災害補償保険法',tag:'労災保険法',ed:'2027'},
+  {no:'04',mark:'④',ab:'雇保法',name:'雇用保険法',tag:'雇用保険法',ed:'2027'},
+  {no:'05',mark:'⑤',ab:'徴収法',name:'労働保険徴収法',tag:'徴収法',ed:'2026'},
+  {no:'06',mark:'⑥',ab:'健保法',name:'健康保険法',tag:'健康保険法',ed:'2026'},
+  {no:'07',mark:'⑦',ab:'国年法',name:'国民年金法',tag:'国民年金法',ed:'2026'},
+  {no:'08',mark:'⑧',ab:'厚年法',name:'厚生年金保険法',tag:'厚生年金保険法',ed:'2026'},
+  {no:'09',mark:'⑨',ab:'労一',name:'労務管理その他の労働に関する一般常識',tag:'労働一般常識',ed:'2026'},
+  {no:'10',mark:'⑩',ab:'社一',name:'社会保険に関する一般常識',tag:'社会一般常識',ed:'2026',ready:true,
    key:'dd_shaichi_ch12_v1',field:'shaichi_ch12'},
 ].map(b=>({key:'dd_drill_'+b.no+'_v1', field:'drill_'+b.no, ...b}));
 /* 版ごとの、Obsidian のファイル名とページの探し方。
@@ -504,7 +505,7 @@ let Q=[], CHS=[], YKS={};   // YKS: 横断の比較（論点の名前→{t,r}）
 /* 版スタンプ。VER は「この行を伏せたファイル内容」の sha256 先頭8桁で、
    npm test（scripts/version-stamp.mjs）が一致を強制する。
    内容を変えれば必ず変わるので、画面の値を見れば新旧を判別できる。 */
-const VER='c3291ea7';
+const VER='aed662b3';
 const KEY=BOOK.key;                    // 手元の記録の保存先（冊ごと）
 const LV=['未学習','要復習','不安あり','覚えた','完璧'];
 const LVC=['#64748b','#ef4444','#eab308','#22c55e','#3b82f6'];
@@ -830,7 +831,7 @@ function setBook(no){
 function renderHome(){
   document.body.classList.remove('incard');
   document.getElementById('books').innerHTML=BOOKS.map(b=>
-    `<button class="${b.no===BOOK.no?'on':''}" ${b.ready?'':'disabled'} title="${b.mark}${b.name}" onclick="setBook('${b.no}')">${b.mark}</button>`).join('');
+    `<button class="${b.no===BOOK.no?'on':''}" ${b.ready?'':'disabled'} title="${b.mark}${b.name}" onclick="setBook('${b.no}')">${b.mark}${b.ab}</button>`).join('');
   document.getElementById('bookName').textContent=`${BOOK.mark}${BOOK.name}（${BOOK.ed}年版）`;
   const c=counts(), tot=QS().length||1;
   const pct=QS().reduce((a,q)=>a+W[box(q.id)],0)/tot*100;
@@ -846,7 +847,7 @@ function renderHome(){
   document.getElementById('tstat').innerHTML = (ta.n
     ? `学習時間 <b>${fmt(ta.t)}</b>　1問あたり <b>${fmt(ta.t/ta.n)}</b>`
     : '学習時間 <b>0秒</b>')
-    + (ta.n!==S.n ? `<br>全冊の合計（${BOOK.mark}は ${S.n}問）` : '');
+    + (ta.n!==S.n ? `<br>全問題集の合計（${BOOK.mark}は ${S.n}問）` : '');
   const dn=dueList().length;
   document.getElementById('dueN').textContent=dn;
   document.getElementById('btnRev').disabled = dn===0;
@@ -1674,7 +1675,7 @@ function clearLog(){
   logMem=[]; document.getElementById('bootlog').style.display='none';
 }
 function resetAll(){
-  if(!confirm(`この端末の ${BOOK.mark}${BOOK.name} の学習記録をすべて消します（ほかの冊の記録は残ります）。よろしいですか？`))return;
+  if(!confirm(`この端末の ${BOOK.mark}${BOOK.name} の学習記録をすべて消します（ほかの問題集の記録は残ります）。よろしいですか？`))return;
   lg('resetAll',{p:Object.keys(S.p).length});    // 明示的なリセット
   allowEmptyPush=true;                      // 意図したリセットなのでクラウドにも反映する
   S={p:{},day:today(),n:0,t:0,daily:{},log:{},read:S.read};saveS();renderHome();   // 読んだページは学習記録ではないので残す
