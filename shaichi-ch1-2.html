@@ -345,7 +345,7 @@ body.incard header{display:none}
     <div class="chgrid" id="chlist" style="margin-bottom:14px"></div>
     <div class="btnrow">
       <button class="mbtn primary" onclick="start('auto')">おまかせ出題
-        <small>完璧を除く <span id="dailyN">0</span>問から、前回からの間隔・定着度・直近の成否で重みづけして出します</small></button>
+        <small>最後に読んで進んだページの未出題を先に、あとは忘れかけている問題から出します（対象 <span id="dailyN">0</span>問）</small></button>
       <button class="mbtn resume" id="btnResume" onclick="resume()" style="display:none">▶ 続きから
         <small id="resumeN"></small></button>
       <button class="mbtn" id="btnRev" onclick="start('review')">復習優先出題
@@ -514,7 +514,7 @@ let Q=[], CHS=[], YKS={};   // YKS: 横断の比較（論点の名前→{t,r}）
 /* 版スタンプ。VER は「この行を伏せたファイル内容」の sha256 先頭8桁で、
    npm test（scripts/version-stamp.mjs）が一致を強制する。
    内容を変えれば必ず変わるので、画面の値を見れば新旧を判別できる。 */
-const VER='ccf0ce36';
+const VER='1afc0e66';
 const KEY=BOOK.key;                    // 手元の記録の保存先（冊ごと）
 const LV=['未学習','要復習','不安あり','覚えた','完璧'];
 const LVC=['#64748b','#ef4444','#eab308','#22c55e','#3b82f6'];
@@ -745,41 +745,46 @@ function pushHist(id,ok){ return (hist(id)+(ok?'1':'0')).slice(-HN); }
 function histD(id){ const r=rec(id), d=(r&&r.hd)||''; return typeof d==='string'?d:''; }
 function mmdd(){ const d=dayD(); return String(d.getMonth()+1).padStart(2,'0')+String(d.getDate()).padStart(2,'0'); }
 function pushHistD(id){ return (histD(id)+mmdd()).slice(-HN*4); }
-/* 誤答率。直近ほど重くする（10回中いちばん新しい回が最も効く）。
-   履歴が無ければ null を返し、呼び出し側で「未知」として扱う。 */
-function wrongRate(id){
-  const h=hist(id); if(!h) return null;
-  let sum=0, bad=0;
-  for(let i=0;i<h.length;i++){ const w=i+1; sum+=w; if(h[i]==='0') bad+=w; }
-  return sum?bad/sum:0;
-}
-/* おまかせ出題の優先度。大きいほど先に出す。
-   定着が浅い・よく間違える・直近で間違えた・期限が来た、を足し合わせる。 */
-/* おまかせ出題の優先度（2026-10-12 組み直し）。大きいほど先に出す。
-   主な重み＝前回答えてからの日数が「次に出すまでの目安日数」の何倍か（3倍で頭打ち）。
-   今日答えた問題は0倍なので、ほかに出す問題がある限りその日は出ない（同じ日の繰り返しを避ける）。
-   補助の重み＝定着度（要復習ほど高い）と誤答率・直近の誤り。未学習（新しく足した問題）は最優先。
-   前回の日付は最終回答日時 at を使う（答えた日 hd は 2026-10-12 から記録し始めたので、それより前の回は持たない）。 */
-const GAP_DAYS=[0,1,1,3,7];                   // 目安日数: 未学習・要復習・不安あり・覚えた・完璧
-const LVW=[0,60,40,20,0];                     // 定着度の補助の重み
+/* おまかせ出題の重み（2026-10-29 組み直し・木下氏）。大きいほど先に出す。
+   重み＝今その問題を忘れている見込み（1−思い出せる確率R）。忘れかけた問題から思い出すと記憶が最も強まる（間隔効果）。
+   R は忘却曲線の FSRS の式 R=(1+t/(9S))^-1。t＝前回答えてからの日数、S＝記憶の強さ（t=S で R がちょうど90%になる日数）。
+   S は直近10回の正誤を古い順にたどって決める（SuperMemo SM-2 の考え方）：
+     正解：初回は S_FIRST 日、2回目以降は S_GROW 倍（S_MAX で頭打ち）
+     不正解：S_LAPSE 日に戻す
+   このため直近の間違いほど S が小さく、前回・2回前・3回前の間違いの順に強く効く。
+   今日答えた問題は出さない（クリアランス）。間違えた問題は翌日から出す（一晩おいてからの解き直しが最も効くため）。
+   前回の日付は最終回答日時 at を使う。 */
+const S_FIRST=3, S_GROW=2.5, S_LAPSE=0.4, S_MAX=180;   // 初回正解3日・間違い0.4日は FSRS の既定値（約3.2日・0.4日）、2.5倍は SM-2 の既定の伸び率
 function daysSince(id){
   const r=rec(id); if(!r||!r.at) return null;
   const a=dayD(new Date(r.at).getTime()), now=dayD();
   const d0=new Date(a.getFullYear(),a.getMonth(),a.getDate()), d1=new Date(now.getFullYear(),now.getMonth(),now.getDate());
   return Math.round((d1-d0)/86400000);        // 日数の差（3:00 区切り。今日答えた＝0）
 }
-function priority(id){
-  const b=box(id), h=hist(id), r=wrongRate(id);
-  if(b===0 && !h) return 1000;                         // 未学習は最優先
-  const g=daysSince(id);
-  const ratio = g===null ? 3 : Math.min(g/GAP_DAYS[b||1], 3);
-  let s = ratio*100;                                   // 期限をどれだけ過ぎたか（主な重み）
-  s += LVW[b];                                         // 要復習・不安ありほど高い
-  s += (r===null ? 0 : r*30);                          // よく間違える
-  if(h && h[h.length-1]==='0') s += 20;                // 直近で間違えた
-  if(g===0) s -= 300;                                 // 今日答えた問題は、ほかに出す問題がないときだけ
-  return s;                                           // 同点のばらしは byPriority の揺らぎ（±8）で行う
+function stability(id){
+  let S=0;
+  for(const c of hist(id)) S = c==='1' ? (S ? Math.min(S*S_GROW,S_MAX) : S_FIRST) : S_LAPSE;
+  return S||S_LAPSE;
 }
+function recall(id){                                   // 今思い出せる確率 R（0〜1）
+  const g=daysSince(id); if(g===null) return 0;        // 日付の無い記録は、忘れているものとみなす
+  return 1/(1+g/(9*stability(id)));
+}
+function priority(id){
+  if(daysSince(id)===0) return -1;                     // 今日答えた問題は最下位（おまかせ・復習優先とも呼び出し側で外している）
+  return 1-recall(id);                                 // 同点のばらしは byPriority の揺らぎで行う
+}
+/* おまかせで出す未出題（2026-10-29 木下氏）。テキストを読んだその日に確かめるため、
+   最後に読んだ日に進んだページ（それより前の日の最大ページの次から、最後の日のページまで）の未出題だけを出し、最優先にする。
+   それより前のページの未出題は、おまかせには出さない（「未出題から」で出す）。読んだ記録の無い問題集では出さない。 */
+function newSpan(no){
+  const s=(no&&SB[no])||S, ds=Object.keys(s.read||{}).filter(k=>(s.read[k]||{}).p>0).sort();
+  if(!ds.length) return null;
+  const last=ds[ds.length-1]; let prev=0;
+  for(const k of ds.slice(0,-1)) prev=Math.max(prev,s.read[k].p);
+  return {from:prev+1, to:s.read[last].p};
+}
+function inNewSpan(q){ const sp=newSpan(q._b); return !!sp && q.page>=sp.from && q.page<=sp.to; }
 function due(id){
   const r=rec(id); if(!r) return true;            // 未学習は常に対象
   if(daysSince(id)===0) return false;              // 今日答えた問題は出さない（同じ日に繰り返さない）
@@ -874,7 +879,7 @@ function renderHome(){
   const dn=dueList().length;
   document.getElementById('dueN').textContent=dn;
   document.getElementById('btnRev').disabled = dn===0;
-  document.getElementById('dailyN').textContent=QD().length;
+  document.getElementById('dailyN').textContent=QD().filter(q=>box(q.id)>0?(!waitPerfect(q.id)&&daysSince(q.id)!==0):inNewSpan(q)).length;
   const pl=perfectList().length, pd=perfectDue().length;
   document.getElementById('perfN').textContent = pl
     ? `完璧 ${pl}問のうち、前回から${PERFECT_CHECK}日以上たった問題 ${pd}問。間違えたら要復習に戻ります`
@@ -1278,7 +1283,7 @@ function shuffle(a){for(let i=a.length-1;i>0;i--){const j=Math.floor(Math.random
 /* 優先度の高い順に並べる。同点が固まらないよう小さな揺らぎを足す
    （揺らぎ幅8は「定着度1段階ぶん（10）」より小さいので、順位の大枠は崩れない）。 */
 function byPriority(list){
-  return list.map(q=>({q:q,s:priority(q.id)+Math.random()*8}))
+  return list.map(q=>({q:q,s:priority(q.id)+Math.random()*0.02}))
              .sort((a,b)=>b.s-a.s).map(x=>x.q);
 }
 function start(mode){
@@ -1291,8 +1296,11 @@ function start(mode){
   else if(mode==='review') pool=byPriority(dueList());   // 復習優先: 期限の来た問題を全部、おまかせと同じ重みの高い順に（2026-10-28 木下氏。全体では問題集をまたいで並ぶ）
   else if(mode==='new')                    // 未出題から: まだ解いていない問題だけ。足りなければその数で終わる（2026-10-17 木下氏）
     pool=shuffle(A.filter(q=>box(q.id)===0)).slice(0,GOAL);
-  else pool=byPriority(A.filter(q=>!waitPerfect(q.id))).slice(0,GOAL);   // auto: 優先度順（完璧の手前で7日たたない問題は除く）
-  if(!pool.length){alert('対象の問題がありません');return;}
+  else {                                   // auto: 進んだページの未出題を先に、残りを忘れている見込みの高い順に（完璧の手前で7日たたない問題は除く）
+    const fresh=shuffle(A.filter(q=>box(q.id)===0&&inNewSpan(q)));
+    pool=fresh.concat(byPriority(A.filter(q=>box(q.id)>0&&!waitPerfect(q.id)&&daysSince(q.id)!==0))).slice(0,GOAL);   // 今日答えた問題は出さない（クリアランス）
+  }
+  if(!pool.length){alert(mode==='auto'?'対象の問題がありません。新しい問題は、読んだページを記録すると、進んだところから出ます（「未出題から」でも出せます）':'対象の問題がありません');return;}
   idx=0;lg('start',{mode:mode,n:pool.length});
   document.getElementById('home').style.display='none';
   document.getElementById('card').style.display='flex';load();saveSession();
