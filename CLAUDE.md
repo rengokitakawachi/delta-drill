@@ -22,6 +22,7 @@
 ## 開発の約束
 
 - アプリ（`shaichi-ch1-2.html`）か `data/q*.json` を直したら `npm run version:fix` → `npm test`（版スタンプは本体と問題のファイルを合わせて計算する）。
+- ①②の `data/q01.json`・`data/q02.json` は、手元の作問スクリプト（delta-drill-START の q01・q02）が書き出す。問題データだけを直すと、作問を走らせ直したときに消える（2026-11-01 に①72問・②19問のずれをそろえた）。直したら、作問スクリプトか、その上書き表（`q01/patch-q01.json`・`q02/patch-q02.json`）にも入れ、走らせた結果が問題データと一致することを確かめる。⑩は問題データが正本。
 - 配信HTML（index.html）を直接編集しない。`build/data/*.json`・`build/app2_*.html`・`build/qbank.js` を編集 → `npm run build`。
 - `detail_<id>.json` は `gen_<id>.json` と**同順・同長**（不一致だと解説が捨てられる）。
 - `weights_<id>.json` のキーは gen の `law` 値と**完全一致**させる（qw() の部分一致依存で誤マッチした実績あり）。
