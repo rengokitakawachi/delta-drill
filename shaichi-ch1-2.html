@@ -509,7 +509,7 @@ let Q=[], CHS=[], YKS={};   // YKS: 横断の比較（論点の名前→{t,r}）
 /* 版スタンプ。VER は「この行を伏せたファイル内容」の sha256 先頭8桁で、
    npm test（scripts/version-stamp.mjs）が一致を強制する。
    内容を変えれば必ず変わるので、画面の値を見れば新旧を判別できる。 */
-const VER='0c7ca39f';
+const VER='711a46b6';
 const KEY=BOOK.key;                    // 手元の記録の保存先（冊ごと）
 const LV=['未学習','要復習','不安あり','覚えた','完璧'];
 const LVC=['#64748b','#ef4444','#eab308','#22c55e','#3b82f6'];
@@ -676,7 +676,10 @@ function setObsMode(m){try{localStorage.setItem('obsidian_mode',m);}catch(e){} r
 /* フォルダの設定が版の名前（2026・2026v2・2027）で終わっていれば、いまの冊の版のフォルダに読み替える。
    設定は1つのまま、冊ごとに sharoshi/2026・sharoshi/2027 などを開けるようにするため。 */
 function obsEdFolder(b){ return obsFolder().replace(/(^|\/)(2026v2|2026|2027)$/,'$1'+b.ed); }
-function obsHref(page,b){
+/* hd … 問題に付けた教材の見出しの名前（2026-11-01 木下氏）。2026v2・2027 の冊で hd があれば、ページの先頭ではなく
+   その見出しまで heading= で飛ぶ。hd は作問の最後（delta-drill-START の heading/apply-heading.mjs）が、問題のページの範囲にある
+   見出しのうち、冊の中で名前が1つだけのものから選んで付ける。決まらない問題には付けず、これまでどおり block=pN で飛ぶ。 */
+function obsHref(page,b,hd){
   const v=obsVault(), vp=v?('vault='+encodeURIComponent(v)+'&'):'';
   const lb=obsLabel(b), jp=EDS[b.ed].jump;
   if(obsMode()==='adv' && jp==='heading'){
@@ -686,12 +689,13 @@ function obsHref(page,b){
   }
   if(obsMode()==='adv' && jp==='block'){   // ページの区切りの行の末尾の ^pN へ飛ぶ
     const f=obsEdFolder(b), fp=(f?f+'/':'')+lb+'.md';
+    if(hd) return 'obsidian://advanced-uri?'+vp+'filepath='+encodeURIComponent(fp)+'&heading='+encodeURIComponent(hd);
     return 'obsidian://advanced-uri?'+vp+'filepath='+encodeURIComponent(fp)+'&block=p'+page;
   }
   return 'obsidian://search?'+vp+'query='+encodeURIComponent('"'+lb+' p.'+page+'"');
 }
-function refLine(page,b){
-  return '<a class="reflink" href="'+obsHref(page,b)+'">📖 '+obsLabel(b)+' P.'+page+' ↗</a>';
+function refLine(page,b,hd){
+  return '<a class="reflink" href="'+obsHref(page,b,hd)+'">📖 '+obsLabel(b)+' P.'+page+' ↗</a>';
 }
 /* ジャンプが効かないときの切り分け。
    「開かない」としか分からないと手の打ちようがないので、
@@ -725,7 +729,15 @@ function obsDiag(){
       '3 か 4 は開くのにページ位置に飛ばない → 見出しが一致していない（検索モードに切り替える）');
   h+=diagStep(6,'検索で開く（プラグイン不要）','obsidian://search?'+vp+'query='+encodeURIComponent('"'+OBS_DIAG_LABEL+' p.'+P+'"'),
       'これが動くなら「🔍 検索で開く」モードで運用できる');
-  h+='</ol><div style="color:var(--sub)">※ ⑩社会一般常識の 2026年版の p.'+P+'（介護保険法）で試します。</div>';
+  /* 2027年版の見出しへのジャンプ（2026-11-01）。★ や ⑷ を含む見出しでも飛べるかを確かめる。 */
+  const b2=BOOKS.find(x=>x.no==='02'), f2=obsEdFolder(b2), fp2=(f2?f2+'/':'')+obsLabel(b2)+'.md';
+  h+=diagStep(7,'2027年版：★の付いた見出しまで飛ぶか','obsidian://advanced-uri?'+vp+'filepath='+encodeURIComponent(fp2)
+      +'&heading='+encodeURIComponent('事業者 ★★★'),
+      '②の p.14「事業者」へ飛ばない → ★の付いた見出しでは飛べない。この結果を伝えてください');
+  h+=diagStep(8,'2027年版：⑷ の付いた見出しまで飛ぶか','obsidian://advanced-uri?'+vp+'filepath='+encodeURIComponent(fp2)
+      +'&heading='+encodeURIComponent('⑷ 安全衛生推進者・衛生推進者'),
+      '②の「安全衛生推進者・衛生推進者」へ飛ばない → ⑷ の付いた見出しでは飛べない。この結果を伝えてください');
+  h+='</ol><div style="color:var(--sub)">※ 1〜6 は ⑩社会一般常識の 2026年版の p.'+P+'（介護保険法）、7・8 は ②労働安全衛生法の 2027年版で試します。</div>';
   el.innerHTML=h; el.style.display='block';
 }
 
@@ -1485,7 +1497,7 @@ function feedback(ok,correctLabel){
     +(cur.detail?`<div class="detail">${cur.detail}</div>`:'')
     +ykBox(cur)
     +scoreLine(cur)
-    +refLine(cur.page,BK[cur._b]);
+    +refLine(cur.page,BK[cur._b],cur.hd);
   const sec=stopTimer(); lastSec=sec;
   saveSession();                        // 回答済みであることを残す（中断→再開で同じ問題に戻らない）
   /* 正しく × と答えたときだけ、誤り箇所を問う。
