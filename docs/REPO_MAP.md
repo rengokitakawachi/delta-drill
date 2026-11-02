@@ -3,7 +3,7 @@
 > 自動生成: `npm run map`（scripts/repo-map.mjs）。**手編集禁止**。
 > ファイルの追加/削除/大幅なサイズ変化の後は手動で再生成してコミットすること（自動更新はされない）。
 
-全体: 101 ファイル / 約 6191 KB
+全体: 101 ファイル / 約 6474 KB
 
 ## 領域一覧
 
@@ -15,7 +15,7 @@
 | build/ | 65 | 2312 | ビルド正本(SSOT): head/tail + data/*.json → index.html | ここが編集対象 |
 | build/data/ | 60 | 2158 | 問題データ gen_/detail_/sentaku_/weights_<科目id>.json | △ 50KB超多数。必要な科目のみ部分読み |
 | CLAUDE.md | 1 | 9 | AIエージェント向け規約（トークン節約規約を含む） |  |
-| data/ | 4 | 1659 | アプリの問題 q<冊番号>.json（{chs, q}。1問1行） | △ 大きい。Grep で問題番号・id を探して部分読み |
+| data/ | 4 | 1941 | アプリの問題 q<冊番号>.json（{chs, q}。1問1行） | △ 大きい。Grep で問題番号・id を探して部分読み |
 | ikukyu.html | 1 | 15 | 育休 確認問題（単体配信物） |  |
 | index.html | 1 | 1878 | 旧総合版クイズ（利用終了・配信物） | ⛔ 生成物。手編集禁止・全文Read禁止。build/ を編集→ npm run build |
 | notes/ | 4 | 8 | —（未登録領域。役割を AREAS に追記推奨） |  |
@@ -34,6 +34,7 @@
 | 1878 | index.html | 生成物。読む必要なし（build/ が正本）。どうしても中身が要る時: Grep -n で行番号特定 → Read offset/limit で部分読み |
 | 704 | data/q01.json | どうしても中身が要る時: Grep -n で行番号特定 → Read offset/limit で部分読み |
 | 608 | data/q10.json | どうしても中身が要る時: Grep -n で行番号特定 → Read offset/limit で部分読み |
+| 322 | data/q03.json | どうしても中身が要る時: Grep -n で行番号特定 → Read offset/limit で部分読み |
 | 308 | data/q02.json | どうしても中身が要る時: Grep -n で行番号特定 → Read offset/limit で部分読み |
 | 113 | shaichi-ch1-2.html | どうしても中身が要る時: Grep -n で行番号特定 → Read offset/limit で部分読み |
 
