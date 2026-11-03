@@ -30,7 +30,7 @@ for (const f of books) {
   }
   for (const q of d.q) {
     if (q.yk && !yks[q.yk]) errs.push(`${f} の ${q.id} の横断の比較「${q.yk}」が yks に無い`);
-    if (q.yk && !(q.sc && q.sc.y)) errs.push(`${f} の ${q.id} に横断の比較があるのに横断の印（sc.y）が無い`);
+    // 横断の比較は、横断の印（sc.y・加点）が無い問題にも付けてよい（2026-11-03）
     if (bno !== '10' && !String(q.id).startsWith(`${bno}-`)) errs.push(`${f} の ${q.id} の名札に冊番号「${bno}-」が無い`);
     if (!new RegExp(`^${bno}-\\d{3}$`).test(q.no || '')) errs.push(`${f} の ${q.id} の問題番号「${q.no}」が「${bno}-3桁」でない`);
     if (!chs.has(q.ch)) errs.push(`${f} の ${q.id} の章 ${q.ch} が章の一覧に無い`);
