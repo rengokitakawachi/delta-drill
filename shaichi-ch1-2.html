@@ -509,13 +509,13 @@ let Q=[], CHS=[], YKS={};   // YKS: 横断の比較（論点の名前→{t,r}）
 /* 版スタンプ。VER は「この行を伏せたファイル内容」の sha256 先頭8桁で、
    npm test（scripts/version-stamp.mjs）が一致を強制する。
    内容を変えれば必ず変わるので、画面の値を見れば新旧を判別できる。 */
-const VER='a508866c';
+const VER='6bf649db';
 const KEY=BOOK.key;                    // 手元の記録の保存先（冊ごと）
 const LV=['未学習','要復習','不安あり','覚えた','完璧'];
 const LVC=['#64748b','#ef4444','#eab308','#22c55e','#3b82f6'];
 const W=[0,0.25,0.5,0.75,1.0];
 const IV=[0,0,1,3,7];   // 日数。box0/1は即再出題
-const GOAL=40;   // 1日の目標・1回の出題数（2026-10-12 木下氏 20→40）
+const GOAL=50;   // 1日の目標・1回の出題数（2026-10-12 木下氏 20→40、2026-11-03 40→50）
 
 /* 1日の区切りは 3:00（2026-10-22 木下氏。Studyplus・学習記録の同期にそろえる）。
    0:00〜2:59 は前の日として数える。今日の数・時間、日別の記録、答えた日（hd）、日数の差のすべてがこれを使う。 */
@@ -1436,13 +1436,13 @@ function spotPick(k){
   setTimeout(revealFb,ok?450:900);
 }
 /* 誤り箇所を外したとき、答えた直後に書いた「正解」の記録を「不正解」に書き換える。
-   回数は増やさない（同じ1回の答えの扱いを直すだけ）。定着度は不正解と同じく要復習にする。 */
+   回数は増やさない（同じ1回の答えの扱いを直すだけ）。定着度は不正解と同じ（答える前の段階から missBox）。 */
 let lastSec;
 function spotMiss(){
   const p=rec(cur.id); if(!p) return;
   const h=hist(cur.id);
   if(h && h.slice(-1)==='1') p.h=h.slice(0,-1)+'0';
-  p.b=1; p.at=new Date().toISOString();
+  p.b=missBox(cur._prevB); p.at=new Date().toISOString();
   saveS();
   lg('spotmiss',{id:cur.id});
   showRec(lastSec);
@@ -1516,8 +1516,9 @@ function feedback(ok,correctLabel){
   }else{
     revealFb();
   }
-  // 自動記録する。初回正解=覚えた／以降の正解=1段階上げる／不正解=どこからでも要復習
-  apply(ok ? nextBox(box(cur.id),cur.id) : 1, false, sec, ok);
+  // 自動記録する。初回正解=覚えた／以降の正解=1段階上げる／不正解=missBox（覚えたからは不安あり、ほかは要復習）
+  cur._prevB=box(cur.id);
+  apply(ok ? nextBox(cur._prevB,cur.id) : missBox(cur._prevB), false, sec, ok);
   showRec(sec);
   document.getElementById('selfrate').style.display='block';
   document.getElementById('nextBtn').textContent=(idx===pool.length-1)?'ホームへ →':'次の問題 →';
@@ -1656,6 +1657,10 @@ function nextBox(b,id){
   return Math.min(b+1,4);
 }
 
+/* 間違えたときの段階（2026-11-03 木下氏）。覚えた（box 3）からは不安あり（box 2）に1段だけ下げる。
+   一度の取りこぼしで要復習まで落とすと、覚えていた問題が毎日の出題に溜まるため。
+   未学習・要復習・不安ありからは要復習。完璧の確認テストで間違えたら要復習（2026-10-12 の決定のまま） */
+function missBox(b){ return b===3 ? 2 : 1; }
 function apply(b,recount,sec,ok){
   if(!recount && rollDay()) saveS();
   const s=stOf(cur.id);   // 答えた問題の問題集の記録に書く
