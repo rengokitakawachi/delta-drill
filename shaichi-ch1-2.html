@@ -476,7 +476,7 @@ const BOOKS=[
   {no:'01',mark:'①',ab:'労基法',name:'労働基準法',tag:'労働基準法',ed:'2027',ready:true},
   {no:'02',mark:'②',ab:'安衛法',name:'労働安全衛生法',tag:'労働安全衛生法',ed:'2027',ready:true},
   {no:'03',mark:'③',ab:'労災法',name:'労働者災害補償保険法',tag:'労災保険法',ed:'2027',ready:true},
-  {no:'04',mark:'④',ab:'雇保法',name:'雇用保険法',tag:'雇用保険法',ed:'2027'},
+  {no:'04',mark:'④',ab:'雇保法',name:'雇用保険法',tag:'雇用保険法',ed:'2027',ready:true},
   {no:'05',mark:'⑤',ab:'徴収法',name:'労働保険徴収法',tag:'徴収法',ed:'2026'},
   {no:'06',mark:'⑥',ab:'健保法',name:'健康保険法',tag:'健康保険法',ed:'2026'},
   {no:'07',mark:'⑦',ab:'国年法',name:'国民年金法',tag:'国民年金法',ed:'2026'},
@@ -517,7 +517,7 @@ let Q=[], CHS=[], YKS={};   // YKS: 横断の比較（論点の名前→{t,r}）
 /* 版スタンプ。VER は「この行を伏せたファイル内容」の sha256 先頭8桁で、
    npm test（scripts/version-stamp.mjs）が一致を強制する。
    内容を変えれば必ず変わるので、画面の値を見れば新旧を判別できる。 */
-const VER='d1fc598d';
+const VER='15e349e4';
 const KEY=BOOK.key;                    // 手元の記録の保存先（冊ごと）
 const LV=['未学習','要復習','不安あり','覚えた','完璧'];
 const LVC=['#64748b','#ef4444','#eab308','#22c55e','#3b82f6'];
@@ -837,8 +837,11 @@ function due(id){
    学習記録は ID で引くので、ストックに回しても消えない。 */
 function QS(){ return Q.filter(q=>!q.stock); }
 /* 解放済みの問題（2026-11-03 木下氏）。読んだページまでの問題と、答えたことのある問題。
-   学習状況の棒と進捗率はこれで数える（読んでいない範囲を未学習として数えない）。読んだページの記録が無い冊は全部。 */
-function unlocked(q){ const m=readMax(q._b); return !(m && q.page>m) || box(q.id)>0; }
+   学習状況の棒と進捗率はこれで数える（読んでいない範囲を未学習として数えない）。
+   読んだページの記録が無い冊は、答えた問題があれば全部（記録を始める前から解いていた冊）、なければ0問（まだ読んでいない冊）。 */
+const answeredBook={};
+function bookAnswered(no){ if(!(no in answeredBook)){ const s=SB[no]; answeredBook[no]=!!s && Object.keys(s.p).length>0; } return answeredBook[no]; }
+function unlocked(q){ const m=readMax(q._b); return (m ? q.page<=m : bookAnswered(q._b)) || box(q.id)>0; }
 function QU(){ return QS().filter(unlocked); }
 function counts(){const c=[0,0,0,0,0];QU().forEach(q=>c[box(q.id)]++);return c;}
 /* 出題する問題の種類（○×＝ox／穴埋め＝sen）の有効・無効。端末ごとに覚える。
