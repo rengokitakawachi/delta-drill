@@ -517,7 +517,7 @@ let Q=[], CHS=[], YKS={};   // YKS: 横断の比較（論点の名前→{t,r}）
 /* 版スタンプ。VER は「この行を伏せたファイル内容」の sha256 先頭8桁で、
    npm test（scripts/version-stamp.mjs）が一致を強制する。
    内容を変えれば必ず変わるので、画面の値を見れば新旧を判別できる。 */
-const VER='3a43e804';
+const VER='8a2c0721';
 const KEY=BOOK.key;                    // 手元の記録の保存先（冊ごと）
 const LV=['未学習','要復習','不安あり','覚えた','完璧'];
 const LVC=['#64748b','#ef4444','#eab308','#22c55e','#3b82f6'];
@@ -1250,12 +1250,15 @@ function importLv(books){
 }
 /* 段階ごとの推移のグラフ。冊ごとに、記録のない日は前の日の値を引き継いで足す。
    覚えたが多いと要復習・不安ありの線が底に潰れるので、凡例を押すとその線を隠し、目盛りを残りの線に合わせる。 */
+/* 描き始めは 2026-10-11（2026-11-03 木下氏）。⑩はこの日に出題セットを決めてストックを分けた。
+   それより前の写しはストックの問題を含み、出題セットだけの数に直せないので描かない（記録には残す）。 */
+const TREND_FROM='2026-10-11';
 const trHide=new Set();
 function trToggle(i){ trHide.has(i)?trHide.delete(i):trHide.add(i); renderTrend(); }
 function renderTrend(){
   const el=document.getElementById('trend'); if(!el) return;
   let first='';
-  for(const b of LB) for(const d in SB[b.no].lv) if(!first||d<first) first=d;
+  for(const b of LB) for(const d in SB[b.no].lv) if(d>=TREND_FROM && (!first||d<first)) first=d;
   if(!first){ el.innerHTML='<div class="lgd">まだ記録がありません</div>'; return; }
   const days=[], end=today();
   for(const t=new Date(first+'T12:00:00'); ymd(t)<=end; t.setDate(t.getDate()+1)) days.push(ymd(t));
