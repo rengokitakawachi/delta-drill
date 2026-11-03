@@ -334,7 +334,7 @@ body.incard header{display:none}
     <div class="tstat" id="tstat"></div>
   </div>
   <div class="panel">
-    <h2>学習状況 <span class="pct" id="progPct">0%</span></h2>
+    <h2>学習状況 <small id="unlk" style="font-weight:400"></small><span class="pct" id="progPct">0%</span></h2>
     <div id="stats"></div>
   </div>
   <div class="panel">
@@ -423,7 +423,7 @@ body.incard header{display:none}
   </div>
   <footer>
     <span id="qsum"></span><br>
-    進捗率は 完璧1.0／覚えた0.75／不安あり0.5／要復習0.25／未学習0 の加重平均<br>
+    進捗率は、解放済み（読んだページまで）の問題の 完璧1.0／覚えた0.75／不安あり0.5／要復習0.25／未学習0 の加重平均<br>
     <span class="link" onclick="resetAll()">学習記録をリセット</span><br>
     <span id="ver" class="ver"></span>　<span class="link" onclick="hardReload()">最新に更新</span>　<span class="link" onclick="showBoot()">診断ログ</span>　<span class="link" onclick="clearLog()">ログを消す</span>
     <pre id="bootlog" style="display:none;text-align:left;font-size:10px;line-height:1.7;color:#94a3b8;background:#0f172a;border:1px solid #1e293b;border-radius:8px;padding:8px;margin:8px 0;overflow-x:auto"></pre>
@@ -517,7 +517,7 @@ let Q=[], CHS=[], YKS={};   // YKS: 横断の比較（論点の名前→{t,r}）
 /* 版スタンプ。VER は「この行を伏せたファイル内容」の sha256 先頭8桁で、
    npm test（scripts/version-stamp.mjs）が一致を強制する。
    内容を変えれば必ず変わるので、画面の値を見れば新旧を判別できる。 */
-const VER='669423d3';
+const VER='6054d8a8';
 const KEY=BOOK.key;                    // 手元の記録の保存先（冊ごと）
 const LV=['未学習','要復習','不安あり','覚えた','完璧'];
 const LVC=['#64748b','#ef4444','#eab308','#22c55e','#3b82f6'];
@@ -836,7 +836,11 @@ function due(id){
 /* 出題セット（2026-10-11）: "stock": true の問題はストック。出題・統計・章ごとの数に入れない。
    学習記録は ID で引くので、ストックに回しても消えない。 */
 function QS(){ return Q.filter(q=>!q.stock); }
-function counts(){const c=[0,0,0,0,0];QS().forEach(q=>c[box(q.id)]++);return c;}
+/* 解放済みの問題（2026-11-03 木下氏）。読んだページまでの問題と、答えたことのある問題。
+   学習状況の棒と進捗率はこれで数える（読んでいない範囲を未学習として数えない）。読んだページの記録が無い冊は全部。 */
+function unlocked(q){ const m=readMax(q._b); return !(m && q.page>m) || box(q.id)>0; }
+function QU(){ return QS().filter(unlocked); }
+function counts(){const c=[0,0,0,0,0];QU().forEach(q=>c[box(q.id)]++);return c;}
 /* 出題する問題の種類（○×＝ox／穴埋め＝sen）の有効・無効。端末ごとに覚える。
    両方を無効にはできない（出す問題が無くなるため）。統計の総数・定着度は全問のまま。 */
 function typeOn(t){ try{ return localStorage.getItem('type_off_'+t)!=='1'; }catch(e){ return true; } }
@@ -902,8 +906,9 @@ function renderHome(){
   document.getElementById('books').innerHTML=[ALL_BOOK,...BOOKS].map(b=>
     `<button class="${b.no===BOOK.no?'on':''}" ${b.ready?'':'disabled'} title="${b.mark}${b.name}" onclick="setBook('${b.no}')">${b.mark}${b.ab}</button>`).join('');
   document.getElementById('bookName').textContent=ALL ? `全体（${LB.map(b=>b.mark).join('')}の合算）` : `${BOOK.mark}${BOOK.name}（${BOOK.ed}年版）`;
-  const c=counts(), tot=QS().length||1;
-  const pct=QS().reduce((a,q)=>a+W[box(q.id)],0)/tot*100;
+  const c=counts(), tot=QU().length||1;
+  const pct=QU().reduce((a,q)=>a+W[box(q.id)],0)/tot*100;
+  document.getElementById('unlk').textContent=`解放済み ${QU().length} / ${QS().length}問`;
   document.getElementById('progPct').textContent=pct.toFixed(1)+'%';
   document.getElementById('stats').innerHTML=c.map((n,i)=>
     `<div class="row"><span class="lbl">${LV[i]}</span><span class="barwrap">
