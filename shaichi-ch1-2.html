@@ -39,6 +39,10 @@ header .sub{font-size:11px;color:var(--sub);margin-bottom:10px}
 .row .num{position:absolute;right:6px;top:0;line-height:18px;font-size:11px;font-weight:700}
 .pct{float:right;font-size:12px;color:var(--acc);font-weight:700}
 .goal{font-size:26px;font-weight:800;color:var(--acc)}
+#trend svg{display:block;width:100%;height:auto}
+.lgd{display:flex;flex-wrap:wrap;gap:4px 14px;font-size:12px;color:var(--sub);margin-top:6px}
+.lgd i{display:inline-block;width:12px;height:3px;border-radius:2px;vertical-align:middle;margin-right:5px}
+.lgd b{color:var(--txt)}
 .goal small{font-size:13px;color:var(--sub);font-weight:400}
 .btnrow{display:flex;flex-direction:column;gap:8px}
 .mbtn.resume{background:linear-gradient(135deg,#166534,#22c55e);border-color:#22c55e;color:#fff}
@@ -334,6 +338,10 @@ body.incard header{display:none}
     <div id="stats"></div>
   </div>
   <div class="panel">
+    <h2>段階ごとの推移</h2>
+    <div id="trend"></div>
+  </div>
+  <div class="panel">
     <h2>出題</h2>
     <div class="readrow" id="rdRow"><b id="rdBook"></b>の読んだページ
       <select id="rdDay"><option value="0">今日</option><option value="1">昨日</option></select>
@@ -509,7 +517,7 @@ let Q=[], CHS=[], YKS={};   // YKS: 横断の比較（論点の名前→{t,r}）
 /* 版スタンプ。VER は「この行を伏せたファイル内容」の sha256 先頭8桁で、
    npm test（scripts/version-stamp.mjs）が一致を強制する。
    内容を変えれば必ず変わるので、画面の値を見れば新旧を判別できる。 */
-const VER='6bf649db';
+const VER='3a43e804';
 const KEY=BOOK.key;                    // 手元の記録の保存先（冊ごと）
 const LV=['未学習','要復習','不安あり','覚えた','完璧'];
 const LVC=['#64748b','#ef4444','#eab308','#22c55e','#3b82f6'];
@@ -533,6 +541,7 @@ function pruneLog(o){
 }
 function saveS(){
   for(const b of LB){
+    recLv(SB[b.no]);
     try{localStorage.setItem(b.key,JSON.stringify(SB[b.no]));}
     catch(e){ if(typeof lg==='function') lg('save_fail',String(e).slice(0,60)); }
   }
@@ -551,7 +560,32 @@ function normS(s){
   if(!s.daily||typeof s.daily!=='object') s.daily={};
   if(!s.log||typeof s.log!=='object') s.log={};
   if(!s.read||typeof s.read!=='object') s.read={};
+  if(!s.lv||typeof s.lv!=='object') s.lv={};
   return s;
+}
+/* 段階ごとの数の推移（2026-11-03 木下氏）。lv は 日付→[要復習,不安あり,覚えた,完璧,書いた時刻]。
+   出題セットの問題（ストックを除く）のうち答えたことのある問題を、段階ごとに数える。ホームの「学習状況」と同じ数になる。
+   記録を保存するたびに今日の分を書き直す（段階は答えたときにしか変わらないので、開かなかった日は前の日と同じ）。
+   2026-09-01〜11-02 の分は、delta-study の毎日の写しから「読み込み（統合）」で入れる（importLv）。 */
+let setIds=null, setIdsN=-1;
+function inSet(id){
+  if(setIdsN!==Q.length){ setIds=new Set(QS().map(q=>q.id)); setIdsN=Q.length; }
+  return setIds.has(id);
+}
+function lvCount(s,out){   // out=true のときは、出題セットにない問題（ストック・消えた問題）を数える
+  const c=[0,0,0,0];
+  for(const id in s.p){
+    if(inSet(id)===!!out) continue;
+    const b=Number((s.p[id]||{}).b)||0; if(b>=1&&b<=4) c[b-1]++;
+  }
+  return c;
+}
+function recLv(s){
+  if(!Q.length||!s||!Object.keys(s.p).length) return false;   // 問題を読み込む前は、ストックを見分けられないので書かない
+  const c=lvCount(s), d=today(), o=s.lv[d];
+  if(o && o.slice(0,4).join()===c.join()) return false;
+  s.lv[d]=[...c,Date.now()];
+  return true;
 }
 const SB={};
 for(const b of LB) SB[b.no]=normS(loadS(b.key));
@@ -875,6 +909,9 @@ function renderHome(){
     `<div class="row"><span class="lbl">${LV[i]}</span><span class="barwrap">
      <span class="bar" style="width:${n/tot*100}%;background:${LVC[i]}"></span>
      <span class="num">${n}</span></span></div>`).reverse().join('');
+  let lvCh=false; for(const b of LB) lvCh=recLv(SB[b.no])||lvCh;
+  if(lvCh) saveS();
+  renderTrend();
   const ta=todayAll();
   document.getElementById('todayN').textContent=ta.n;
   document.getElementById('goalN').textContent=GOAL;
@@ -1115,6 +1152,10 @@ function mergeRemote(S,d){   // S はその冊の記録
       if(r>((S[k]||{})[dt]||0)){ S[k][dt]=r; ch=true; }
     }
   }
+  if(d.lv) for(const k in d.lv){              // 推移は日付ごとに新しく書いた方を採る
+    const r=d.lv[k], l=S.lv[k];
+    if(Array.isArray(r) && (!l || (r[4]||0)>(l[4]||0))){ S.lv[k]=r.slice(0,5); ch=true; }
+  }
   if(d.read) for(const k in d.read){          // 読んだページは日付ごとに新しい記録を採る
     const r=d.read[k]||{}, l=S.read[k];
     if(typeof r.p==='number' && (!l || (r.at||0)>(l.at||0))){ S.read[k]={p:r.p, at:r.at||0}; ch=true; }   // p:0 は取り消し
@@ -1139,10 +1180,10 @@ function pushNow(){
   /* 学習記録の中身が前回と同じなら送らない。
      ループが再発しても、ここで必ず止まる。診断ログは変化判定に入れない
      （ログが増えただけで送信が起きると、それ自体がループの燃料になる）。 */
-    const body=JSON.stringify({p:s.p, day:s.day, n:s.n, t:s.t, daily:s.daily, log:s.log, read:s.read});
+    const body=JSON.stringify({p:s.p, day:s.day, n:s.n, t:s.t, daily:s.daily, log:s.log, read:s.read, lv:s.lv});
     if(body===lastPushed[b.no]) continue;
     lastPushed[b.no]=body;
-    out[b.field]={p:s.p, day:s.day, n:s.n, t:s.t, daily:s.daily, log:s.log, read:s.read, diag:readLog().slice(-60), ts:Date.now()};
+    out[b.field]={p:s.p, day:s.day, n:s.n, t:s.t, daily:s.daily, log:s.log, read:s.read, lv:s.lv, diag:readLog().slice(-60), ts:Date.now()};
     np+=nP(s.p); nn+=s.n||0;
   }
   allowEmptyPush=false;
@@ -1167,8 +1208,9 @@ function bkExport(){
 }
 function bkImport(merge){
   const el=document.getElementById('bk'), msg=document.getElementById('bkmsg');
-  if(ALL){ alert('バックアップは、問題集を1つ選んでから使ってください'); return; }
+  if(ALL && !/lvBooks/.test(el.value)){ alert('バックアップは、問題集を1つ選んでから使ってください'); return; }
   let d; try{ d=JSON.parse(el.value); }catch(e){ msg.textContent='読み込めません（形式が不正です）'; return; }
+  if(d&&d.lvBooks){ msg.textContent=importLv(d.lvBooks); saveS(); renderHome(); return; }
   if(!d||typeof d!=='object'||typeof d.p!=='object'){ msg.textContent='読み込めません（学習記録が入っていません）'; return; }
   if(merge){
     let add=0, upd=0;
@@ -1180,10 +1222,60 @@ function bkImport(merge){
     msg.textContent=`統合しました（新規${add}件・更新${upd}件）`;
   }else{
     if(!confirm('この端末の記録を、貼り付けた内容で置き換えます。よろしいですか？')) return;
-    S=SB[BOOK.no]={p:d.p, day:today(), n:d.day===today()?(d.n||0):0, t:d.day===today()?(d.t||0):0, daily:d.daily||{}, log:d.log||{}, read:S.read};
+    S=SB[BOOK.no]={p:d.p, day:today(), n:d.day===today()?(d.n||0):0, t:d.day===today()?(d.t||0):0, daily:d.daily||{}, log:d.log||{}, read:S.read, lv:S.lv};
     msg.textContent='置き換えました。';
   }
   saveS(); renderHome();
+}
+/* 過去の推移の取り込み（2026-11-03）。delta-study の毎日の写しの段階別の数（答えたことのある問題すべて）から、
+   出題セットにない問題の分を引いて入れる。ストックの問題は出題されないので段階が変わらず、
+   いまの段階の数をそのまま引けばよい。ただし出題セットを決めた日（from）より前は、全部が出題されていたので引かない。
+   形：{lvBooks:{冊:{from:'YYYY-MM-DD', lv:{日付:[要復習,不安あり,覚えた,完璧,時刻]}}}} */
+function importLv(books){
+  if(!Q.length) return '問題を読み込んでから、もう一度押してください';
+  const done=[], skip=[];
+  for(const no in books){
+    const s=SB[no], bk=BOOKS.find(b=>b.no===no), mk=bk?bk.mark:no;
+    if(!s){ skip.push(mk); continue; }
+    const x=books[no], off=lvCount(s,true); let n=0;
+    for(const dt in x.lv||{}){
+      const v=x.lv[dt]; if(!Array.isArray(v)) continue;
+      const c=v.slice(0,4).map((k,i)=>dt>=(x.from||'')?Math.max(0,k-off[i]):k);
+      const l=s.lv[dt];
+      if(!l || (l[4]||0)<(v[4]||0)){ s.lv[dt]=[...c,v[4]||0]; n++; }
+    }
+    done.push(`${mk}${n}日`);
+  }
+  return `推移を読み込みました（${done.join('・')||'なし'}）`+(skip.length?`。${skip.join('')}は、問題集「全体」を選んでから読み込んでください`:'');
+}
+/* 段階ごとの推移のグラフ。冊ごとに、記録のない日は前の日の値を引き継いで足す。
+   覚えたが多いと要復習・不安ありの線が底に潰れるので、凡例を押すとその線を隠し、目盛りを残りの線に合わせる。 */
+const trHide=new Set();
+function trToggle(i){ trHide.has(i)?trHide.delete(i):trHide.add(i); renderTrend(); }
+function renderTrend(){
+  const el=document.getElementById('trend'); if(!el) return;
+  let first='';
+  for(const b of LB) for(const d in SB[b.no].lv) if(!first||d<first) first=d;
+  if(!first){ el.innerHTML='<div class="lgd">まだ記録がありません</div>'; return; }
+  const days=[], end=today();
+  for(const t=new Date(first+'T12:00:00'); ymd(t)<=end; t.setDate(t.getDate()+1)) days.push(ymd(t));
+  const last={};
+  const ser=days.map(d=>{
+    const c=[0,0,0,0];
+    for(const b of LB){ const v=SB[b.no].lv[d]; if(v) last[b.no]=v; const u=last[b.no]; if(u) for(let i=0;i<4;i++) c[i]+=u[i]||0; }
+    return c;
+  });
+  const W=340,H=170,L=34,R=8,T=8,B=20, mx=Math.max(1,...ser.flatMap(c=>c.filter((v,i)=>!trHide.has(i))));
+  const st=[1,2,5,10,20,25,50,100,200,250,500,1000].find(k=>mx/k<=5)||Math.ceil(mx/5), ym=Math.ceil(mx/st)*st;
+  const x=i=>L+(W-L-R)*(days.length>1?i/(days.length-1):1), y=v=>T+(H-T-B)*(1-v/ym);
+  let g='';
+  for(let v=0;v<=ym;v+=st) g+=`<line x1="${L}" x2="${W-R}" y1="${y(v)}" y2="${y(v)}" stroke="#334155" stroke-width="0.6"/><text x="${L-4}" y="${y(v)+3}" text-anchor="end" font-size="9" fill="#94a3b8">${v}</text>`;
+  days.forEach((d,i)=>{ if(d.slice(8)==='01'||i===0) g+=`<line x1="${x(i)}" x2="${x(i)}" y1="${T}" y2="${H-B}" stroke="#334155" stroke-width="0.4"/><text x="${x(i)+2}" y="${H-6}" font-size="9" fill="#94a3b8">${+d.slice(5,7)}/${+d.slice(8)}</text>`; });
+  for(let i=3;i>=0;i--) if(!trHide.has(i)) g+=`<polyline fill="none" stroke="${LVC[i+1]}" stroke-width="1.8" stroke-linejoin="round" points="${ser.map((c,j)=>x(j).toFixed(1)+','+y(c[i]).toFixed(1)).join(' ')}"/>`;
+  const now=ser[ser.length-1];
+  el.innerHTML=`<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="段階ごとの問題数の推移">${g}</svg>`+
+    `<div class="lgd">${[3,2,1,0].map(i=>`<span onclick="trToggle(${i})" style="cursor:pointer;${trHide.has(i)?'opacity:.35':''}"><i style="background:${LVC[i+1]}"></i>${LV[i+1]} <b>${now[i]}</b></span>`).join('')}</div>`+
+    `<div class="lgd">凡例を押すと、その線を隠して目盛りを合わせ直します</div>`;
 }
 
 function quit(){
