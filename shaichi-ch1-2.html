@@ -143,6 +143,7 @@ footer{text-align:center;font-size:10px;color:#64748b;padding:14px 0 4px;line-he
 .chips button:disabled{opacity:.45}
 .chips button.hit{background:#166534;border-color:#22c55e;color:#fff}
 .chips button.mis{background:#7f1d1d;border-color:#ef4444;color:#fff}
+.chips button.subj{opacity:.3;border-style:dashed;cursor:default}   /* 論点の主語の節（選べない） */
 .fig{margin:10px 0;padding:10px;border-radius:9px;background:#0b1220;border:1px solid #1e293b}
 .figt{font-size:11px;color:#93c5fd;margin-bottom:7px;line-height:1.5}
 .figr{display:flex;align-items:center;gap:7px;margin-bottom:5px}
@@ -517,7 +518,7 @@ let Q=[], CHS=[], YKS={};   // YKS: 横断の比較（論点の名前→{t,r}）
 /* 版スタンプ。VER は「この行を伏せたファイル内容」の sha256 先頭8桁で、
    npm test（scripts/version-stamp.mjs）が一致を強制する。
    内容を変えれば必ず変わるので、画面の値を見れば新旧を判別できる。 */
-const VER='2b43eea4';
+const VER='4f1b7f1a';
 const KEY=BOOK.key;                    // 手元の記録の保存先（冊ごと）
 const LV=['未学習','要復習','不安あり','覚えた','完璧'];
 const LVC=['#64748b','#ef4444','#eab308','#22c55e','#3b82f6'];
@@ -1621,12 +1622,18 @@ function feedback(ok,correctLabel){
   sp.style.display='none'; document.getElementById('chips').innerHTML='';
   const res=sp.querySelector('.spotres'); if(res) res.remove();
   spotDone=false;
-  const chunks=(ok && cur.t==='ox' && cur._ans===false && cur.w) ? spotChunks(cur._text,cur.w) : null;
+  let chunks=(ok && cur.t==='ox' && cur._ans===false && cur.w) ? spotChunks(cur._text,cur.w) : null;
+  // 主語の節を除くと、選べる節がすべて正解（誤りの節と別解）になる問題は、問うても答えが見えているので挟まない
+  if(chunks && chunks.every(c=>c.hit||(cur.wa||[]).some(x=>c.t.includes(x))||(cur.sj||[]).some(x=>c.t.includes(x)))) chunks=null;
   if(chunks){
     const cb=document.getElementById('chips');
-    // wa：別解の誤り箇所。用語と定義のどちらを直しても正しい文になる問題で、そちらの節も正解にする（2026-10-17 木下氏・10-514）
-    const wa=cur.wa||[];
-    cb.innerHTML=chunks.map((c,i)=>`<button data-hit="${c.hit||wa.some(x=>c.t.includes(x))?1:0}" onclick="spotPick(${i})">${c.t}</button>`).join('');
+    // wa：別解の誤り箇所。条件や結論の側に、直しても正しい文になる節がもう1つある問題で、そちらの節も正解にする
+    // sj：論点の主語の節。主語は正しいものとして誤りを探すので、薄くして選べなくする（2026-11-04 木下氏）。
+    //     日本語の主語ではなく、論点が何についてのものかで決める（条件の節の中にあることもある）
+    const wa=cur.wa||[], sj=cur.sj||[];
+    cb.innerHTML=chunks.map((c,i)=>(!c.hit&&sj.some(x=>c.t.includes(x)))
+      ? `<button class="subj" disabled data-hit="0">${c.t}</button>`
+      : `<button data-hit="${c.hit||wa.some(x=>c.t.includes(x))?1:0}" onclick="spotPick(${i})">${c.t}</button>`).join('');
     sp.style.display='block';
   }else{
     revealFb();
