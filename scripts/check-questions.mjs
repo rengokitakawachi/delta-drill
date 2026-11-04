@@ -107,6 +107,14 @@ for (const q of Q) {
           const ch = spotChunks(q.qx, q.w);
           if (ch && !ch.some(c => !c.hit && c.t.includes(x))) errs.push(`${q.id} の wa「${x}」が w と別の節に収まっていない`);
         }
+        // sj（論点の主語の節）は誤り版に1回だけ現れ、w とも wa とも別の節にあること
+        for (const x of q.sj || []) {
+          if (q.qx.split(x).length - 1 !== 1) errs.push(`${q.id} の誤り版に sj「${x}」が1回でない`);
+          const ch = spotChunks(q.qx, q.w);
+          const c = ch && ch.find(c => c.t.includes(x));
+          if (ch && (!c || c.hit)) errs.push(`${q.id} の sj「${x}」が w と別の節に収まっていない`);
+          if (c && (q.wa || []).some(y => c.t.includes(y))) errs.push(`${q.id} の sj「${x}」が wa と同じ節にある`);
+        }
         if (q.qx.replace(q.w, q.r) !== q.q) errs.push(`${q.id} は w→r の置き換えで正解版に一致しない`);
         // r が正解版に複数回出るのは、入れ替え型を単純置換で作って片方の語が消えた徴候。
         // 実際に o006（「次いで年金」）と o099（「都道府県を交付する」）がこれで壊れていた。
