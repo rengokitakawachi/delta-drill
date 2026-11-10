@@ -518,7 +518,7 @@ let Q=[], CHS=[], YKS={};   // YKS: 横断の比較（論点の名前→{t,r}）
 /* 版スタンプ。VER は「この行を伏せたファイル内容」の sha256 先頭8桁で、
    npm test（scripts/version-stamp.mjs）が一致を強制する。
    内容を変えれば必ず変わるので、画面の値を見れば新旧を判別できる。 */
-const VER='2fcf7df0';
+const VER='34538279';
 const KEY=BOOK.key;                    // 手元の記録の保存先（冊ごと）
 const LV=['未学習','要復習','不安あり','覚えた','完璧'];
 const LVC=['#64748b','#ef4444','#eab308','#22c55e','#3b82f6'];
@@ -1430,11 +1430,15 @@ function start(mode){
 /* 出題のたびに〇と×をランダムに切り替える。
    qx（誤り版）を持つ問題は、コインで q（正解版）と qx のどちらを出すか決める。
    同じ文が日によって〇にも×にもなるので、文を覚えても効かない。 */
+/* ×の文は何通りも持てる（2026-11-10 木下氏・案A）。1つ目は qx・w・r・wa、2つ目からは xs:[{qx,w,r,wa}]。
+   ○と×は半々のまま、×を出すときはその中から等しい確率で1つを選ぶ。x は選んだ×（○を出すときは1つ目）、v はその番号 */
 function draw(q){
   if(q.t!=='ox') return {text:q.q, ans:q.a, flipped:false};
   if(!q.qx) return {text:q.q, ans:q.a, flipped:false};   // 誤り版が無い問題は据え置き
-  return Math.random()<0.5 ? {text:q.q, ans:true, flipped:false}
-                           : {text:q.qx, ans:false, flipped:true};
+  const vs=[{qx:q.qx,w:q.w,r:q.r,wa:q.wa}].concat(q.xs||[]);
+  if(Math.random()<0.5) return {text:q.q, ans:true, flipped:false, x:vs[0], v:0};
+  const v=Math.floor(Math.random()*vs.length);
+  return {text:vs[v].qx, ans:false, flipped:true, x:vs[v], v};
 }
 function showQToday(){   // 出題中の「今日 n/40」とカード上縁の線（全冊の合計）
   const n=todayAll().n, met=n>=GOAL;
@@ -1446,7 +1450,7 @@ function load(){
   cur=pool[idx];answered=false; if(cur) cur._bhNew=null;
   document.body.classList.add('incard');   // 出題中はページ上部の見出しを隠す（中断からの再開でも効くよう load で付ける）
   document.getElementById('card').classList.remove('done');
-  const d=draw(cur); cur._text=d.text; cur._ans=d.ans;
+  const d=draw(cur); cur._text=d.text; cur._ans=d.ans; cur._x=d.x||{}; cur._v=d.v||0;
   document.getElementById('lawname').textContent=cur.law; showQToday();
   const cb=BK[cur._b]||BOOK;
   document.getElementById('tag').textContent=`${cur.no?cur.no+'　':''}${cb.mark}${cb.tag}・p.${cur.page}`;
@@ -1606,8 +1610,8 @@ function feedback(ok,correctLabel){
     +(cur.t==='ox'?'<span class="vca" id="vspot"></span>':'<span class="vca">正解：<b id="ca"></b></span>');
   if(cur.t!=='ox') document.getElementById('ca').textContent=correctLabel;
   const head = (cur.t==='ox'&&cur.qx)
-    ? (cur._ans ? `<div class="flip ok">この版は<b>正しい</b>（「${cur.r}」）</div>`
-                : `<div class="flip ng">「${cur.w}」が誤り。正しくは<b>${cur.r}</b></div>`)
+    ? (cur._ans ? `<div class="flip ok">この版は<b>正しい</b>（「${cur._x.r}」）</div>`
+                : `<div class="flip ng">「${cur._x.w}」が誤り。正しくは<b>${cur._x.r}</b></div>`)
     : '';
   document.getElementById('exp').innerHTML=head+cur.exp
     +(cur.fig||'')
@@ -1623,15 +1627,15 @@ function feedback(ok,correctLabel){
   sp.style.display='none'; document.getElementById('chips').innerHTML='';
   const res=sp.querySelector('.spotres'); if(res) res.remove();
   spotDone=false;
-  let chunks=(ok && cur.t==='ox' && cur._ans===false && cur.w) ? spotChunks(cur._text,cur.w) : null;
+  let chunks=(ok && cur.t==='ox' && cur._ans===false && cur._x.w) ? spotChunks(cur._text,cur._x.w) : null;
   // 主語の節を除くと、選べる節がすべて正解（誤りの節と別解）になる問題は、問うても答えが見えているので挟まない
-  if(chunks && chunks.every(c=>c.hit||(cur.wa||[]).some(x=>c.t.includes(x))||(cur.sj||[]).some(x=>c.t.includes(x)))) chunks=null;
+  if(chunks && chunks.every(c=>c.hit||(cur._x.wa||[]).some(x=>c.t.includes(x))||(cur.sj||[]).some(x=>c.t.includes(x)))) chunks=null;
   if(chunks){
     const cb=document.getElementById('chips');
     // wa：別解の誤り箇所。条件や結論の側に、直しても正しい文になる節がもう1つある問題で、そちらの節も正解にする
     // sj：論点の主語の節。主語は正しいものとして誤りを探すので、薄くして選べなくする（2026-11-04 木下氏）。
     //     日本語の主語ではなく、論点が何についてのものかで決める（条件の節の中にあることもある）
-    const wa=cur.wa||[], sj=cur.sj||[];
+    const wa=cur._x.wa||[], sj=cur.sj||[];
     cb.innerHTML=chunks.map((c,i)=>(!c.hit&&sj.some(x=>c.t.includes(x)))
       ? `<button class="subj" disabled data-hit="0">${c.t}</button>`
       : `<button data-hit="${c.hit||wa.some(x=>c.t.includes(x))?1:0}" onclick="spotPick(${i})">${c.t}</button>`).join('');
@@ -1787,7 +1791,7 @@ function missBox(b){ return b===3 ? 2 : 1; }
 function apply(b,recount,sec,ok){
   if(!recount && rollDay()) saveS();
   const s=stOf(cur.id);   // 答えた問題の問題集の記録に書く
-  if(!recount) lg('ans',{id:cur.id,b:b,p:Object.keys(s.p).length+1,n:s.n+1,ok:ok?1:0,...(cur.t==='ox'?{s:cur._ans?1:0}:{})});  // s: ○×問題で出した版（1=○の文 0=×の文）
+  if(!recount) lg('ans',{id:cur.id,b:b,p:Object.keys(s.p).length+1,n:s.n+1,ok:ok?1:0,...(cur.t==='ox'?{s:cur._ans?1:0,...(cur.xs&&!cur._ans?{v:cur._v}:{})}:{})});  // s: ○×問題で出した版（1=○の文 0=×の文）、v: ×を何通りも持つ問題で出した×の番号（0=1つ目）
   /* 履歴を積むのは実際に答えたときだけ。あとから定着度を付け直しても回数は増やさない。 */
   const h = recount ? hist(cur.id) : pushHist(cur.id,ok);
   const hd = recount ? histD(cur.id) : pushHistD(cur.id);
