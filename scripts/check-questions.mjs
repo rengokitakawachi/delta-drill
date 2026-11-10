@@ -43,6 +43,23 @@ for (const q of Q) {
   if (seenNo.has(q.no)) errs.push(`問題番号 ${q.no} が重なっている`);
   seenId.add(q.id); seenNo.add(q.no);
 }
+// ×を何通りも持つ問題（2026-11-10 案A）：2つ目からの×は xs:[{qx,w,r,wa}]。
+// ×ごとに1問として以下の検査をすべてかけるため、×を差し替えた写しを Q に足す（数の表示からは除く）
+const NQ = Q.length, NOX = Q.filter((q) => q.t === 'ox').length, NSEN = Q.filter((q) => q.t === 'sen').length;
+for (const q of Q.slice(0, NQ)) {
+  if (q.xs === undefined) continue;
+  if (q.t !== 'ox' || !q.qx || !Array.isArray(q.xs) || !q.xs.length) { errs.push(`${q.id} の xs は、誤り版 qx を持つ○×問題に、1つ以上の×の配列で付ける`); continue; }
+  const seen = new Set([q.qx]);
+  q.xs.forEach((x, i) => {
+    const tag = `${q.id}（×${i + 2}）`;
+    if (!x || typeof x.qx !== 'string' || typeof x.w !== 'string' || typeof x.r !== 'string' || (x.wa !== undefined && !Array.isArray(x.wa))) { errs.push(`${tag} の形が正しくない（qx・w・r は文字列、wa は配列）`); return; }
+    if (seen.has(x.qx)) errs.push(`${tag} の誤り版が、ほかの×と同じ`);
+    seen.add(x.qx);
+    const c = { ...q, id: tag, qx: x.qx, w: x.w, r: x.r };
+    delete c.xs; delete c.wa; if (x.wa) c.wa = x.wa;
+    Q.push(c);
+  });
+}
 
 // 誤り箇所タップは本体の spotChunks が節に切れたときだけ出る。
 // 切れないと機能が黙って消えるので、本体からそのまま取り出して全問で確かめる。
@@ -265,4 +282,4 @@ if (errs.length) {
   errs.forEach((e) => console.error('  ' + e));
   process.exit(1);
 }
-console.log(`PASS check-questions: ${books.length}冊・${Q.length}問（○×${Q.filter((q) => q.t === 'ox').length}・選択式${Q.filter((q) => q.t === 'sen').length}）`);
+console.log(`PASS check-questions: ${books.length}冊・${NQ}問（○×${NOX}・選択式${NSEN}、×の2つ目から ${Q.length - NQ}）`);
