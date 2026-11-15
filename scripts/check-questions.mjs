@@ -112,7 +112,8 @@ for (const q of Q) {
     }
   }
   if (q.t === 'ox') {
-    if (!q.qx) errs.push(`${q.id} に誤り版 qx が無い`);
+    // ×を作らない問題（2026-11-15）：誤解が自然な一文で書けない控えの問題は、nox に理由を書けば qx なしでよい（アプリは○の文だけを出す）。出題セットでは許さない。
+    if (!q.qx) { if (!(q.stock && typeof q.nox === 'string' && q.nox)) errs.push(`${q.id} に誤り版 qx が無い` + (q.nox ? '（nox は控えの問題だけ）' : '')); }
     else {
       if (q.q === q.qx) errs.push(`${q.id} の正解版と誤り版が同一`);
       if (!q.w || !q.r) errs.push(`${q.id} に w / r が無い`);
