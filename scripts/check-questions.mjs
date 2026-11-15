@@ -104,7 +104,8 @@ function dup(text) {
 
 for (const q of Q) {
   for (const f of ['q', 'qx', 'text']) {
-    const t = q[f];
+    // 選択式の text は、選択肢の並び（「再就職手当|就職手当」など）を除き、答えを入れた本文で見る
+    const t = f === 'text' && q[f] ? q[f].replace(/【(.+?)】/g, (m, g) => g.split('|')[0]) : q[f];
     if (!t) continue;
     for (const d of dup(t)) {
       errs.push(`${q.id} の ${f} に語の重複「${d.g}」: …${d.ctx}…`);
@@ -248,10 +249,7 @@ for (const q of Q) {
   if (q.t !== 'sen') continue;
   for (const msg of senLeaks(q.text, q.ng)) errs.push(`${q.id} の空欄の答えが文中から分かる: ${msg}`);
   const n = [...q.text.matchAll(/【(.+?)】/g)].length;
-  // 穴の数は文の長さで上限を決める（2026-10-13）。穴を除いた字数で 〜59字は1、〜89字は2、〜119字は3、〜149字は4、それ以上は5
-  const len = q.text.replace(/【(.+?)】/g, (m, g) => g.split('|')[0]).replace(/\s/g, '').length;
-  const cap = len < 60 ? 1 : len < 90 ? 2 : len < 120 ? 3 : len < 150 ? 4 : 5;
-  if (n > cap) errs.push(`${q.id} の穴が${n}個ある（${len}字の文は${cap}つまで）`);
+  // 穴の数の上限（2026-10-13）は外した（2026-11-15 木下氏：試験に出る語をすべて空欄にでき、アプリが文の長さで1回に1〜3個だけ空ける）
   for (const c of [...((q.ng && q.ng.both) || []), ...((q.ng && q.ng.hint) || [])]) {
     if (!Array.isArray(c) || c.some((x) => !Number.isInteger(x) || x < 0 || x >= n)) errs.push(`${q.id} の ng に範囲外の穴の番号がある`);
   }
