@@ -485,6 +485,7 @@ const BOOKS=[
   {no:'09',mark:'⑨',ab:'労一',name:'労務管理その他の労働に関する一般常識',tag:'労働一般常識',ed:'2026'},
   {no:'10',mark:'⑩',ab:'社一',name:'社会保険に関する一般常識',tag:'社会一般常識',ed:'2026',ready:true,
    key:'dd_shaichi_ch12_v1',field:'shaichi_ch12'},
+  {no:'11',mark:'⑪',ab:'用語',name:'キーワード',tag:'キーワード',ed:'2027',ready:true,kw:true},   // 紛らわしい用語を説明文から選ぶ（2026-11-18 木下氏）。用語ごとに習う冊 sb を持つ
 ].map(b=>({key:'dd_drill_'+b.no+'_v1', field:'drill_'+b.no, ...b}));
 /* 版ごとの、Obsidian のファイル名とページの探し方。
    2026 … ページの区切りが見出し【… p.N】。一発ジャンプは heading= で飛ぶ。
@@ -518,7 +519,7 @@ let Q=[], CHS=[], YKS={};   // YKS: 横断の比較（論点の名前→{t,r}）
 /* 版スタンプ。VER は「この行を伏せたファイル内容」の sha256 先頭8桁で、
    npm test（scripts/version-stamp.mjs）が一致を強制する。
    内容を変えれば必ず変わるので、画面の値を見れば新旧を判別できる。 */
-const VER='6693cec9';
+const VER='ebcced5a';
 const KEY=BOOK.key;                    // 手元の記録の保存先（冊ごと）
 const LV=['未学習','要復習','不安あり','覚えた','完璧'];
 const LVC=['#64748b','#ef4444','#eab308','#22c55e','#3b82f6'];
@@ -591,10 +592,16 @@ function recLv(s){
 const SB={};
 for(const b of LB) SB[b.no]=normS(loadS(b.key));
 let S=ALL?null:SB[BOOK.no];
+/* ⑪キーワード（2026-11-18）は、用語を習う冊 sb の読んだページで出す・出さないを決め、一発ジャンプもその冊へ飛ぶ。
+   その冊を読み込んでいないときは、端末の記録とクラウドから読んだページと答えた記録だけを読む（ここでは書かない）。 */
+const XR={};
+for(const b of BOOKS) if(b.ready && !SB[b.no]){ const s=loadS(b.key); XR[b.no]={p:s.p||{}, read:s.read||{}}; }
+function stR(no){ return (no&&(SB[no]||XR[no]))||S; }
+function pb(q){ return q.sb||q._b; }
 function stOf(id){ return ALL ? (SB[IDB[id]]||{p:{}}) : S; }
 function rec(id){ return stOf(id).p[id]; }
 function readDay(back){ const d=dayD(); d.setDate(d.getDate()-(back||0)); return ymd(d); }
-function readMax(no){ const s=(no&&SB[no])||S; let m=0; for(const k in s.read) m=Math.max(m,(s.read[k]||{}).p||0); return m; }
+function readMax(no){ const s=stR(no); let m=0; for(const k in s.read) m=Math.max(m,(s.read[k]||{}).p||0); return m; }
 function saveRead(){
   const el=document.getElementById('rdP'), v=parseInt(el.value,10);
   if(!(v>0)){ alert('読み終えたページを数字で入れてください'); return; }
@@ -820,13 +827,13 @@ function priority(id){
    最後に読んだ日に進んだページ（それより前の日の最大ページの次から、最後の日のページまで）の未出題だけを出し、最優先にする。
    それより前のページの未出題は、おまかせには出さない（「未出題から」で出す）。読んだ記録の無い問題集では出さない。 */
 function newSpan(no){
-  const s=(no&&SB[no])||S, ds=Object.keys(s.read||{}).filter(k=>(s.read[k]||{}).p>0).sort();
+  const s=stR(no), ds=Object.keys(s.read||{}).filter(k=>(s.read[k]||{}).p>0).sort();
   if(!ds.length) return null;
   const last=ds[ds.length-1]; let prev=0;
   for(const k of ds.slice(0,-1)) prev=Math.max(prev,s.read[k].p);
   return {from:prev+1, to:s.read[last].p};
 }
-function inNewSpan(q){ const sp=newSpan(q._b); return !!sp && q.page>=sp.from && q.page<=sp.to; }
+function inNewSpan(q){ const sp=newSpan(pb(q)); return !!sp && q.page>=sp.from && q.page<=sp.to; }
 function due(id){
   const r=rec(id); if(!r) return true;            // 未学習は常に対象
   if(daysSince(id)===0) return false;              // 今日答えた問題は出さない（同じ日に繰り返さない）
@@ -842,7 +849,7 @@ function QS(){ return Q.filter(q=>!q.stock); }
    読んだページの記録が無い冊は、答えた問題があれば全部（記録を始める前から解いていた冊）、なければ0問（まだ読んでいない冊）。 */
 const answeredBook={};
 function bookAnswered(no){ if(!(no in answeredBook)){ const s=SB[no]; answeredBook[no]=!!s && Object.keys(s.p).length>0; } return answeredBook[no]; }
-function unlocked(q){ const m=readMax(q._b); return (m ? q.page<=m : bookAnswered(q._b)) || box(q.id)>0; }
+function unlocked(q){ const m=readMax(pb(q)); return (m ? q.page<=m : bookAnswered(pb(q))) || box(q.id)>0; }
 function QU(){ return QS().filter(unlocked); }
 function counts(){const c=[0,0,0,0,0];QU().forEach(q=>c[box(q.id)]++);return c;}
 /* 出題する問題の種類（○×＝ox／穴埋め＝sen）の有効・無効。端末ごとに覚える。
@@ -869,8 +876,8 @@ const RKEY='range_'+BOOK.no;
 let RANGE=new Set((()=>{ try{ return JSON.parse(localStorage.getItem(RKEY)||'[]'); }catch(e){ return []; } })());
 function saveRange(){ try{ localStorage.setItem(RKEY,JSON.stringify([...RANGE])); }catch(e){} }
 function inRange(q){
-  const m=readMax(q._b); if(m && q.page>m) return false;   // 読んだページより後ろは出さない（その問題の問題集の記録で）
-  if(!m && !bookAnswered(q._b)) return false;              // 読んだ記録も答えた記録も無い冊は出さない（学習状況の数え方 unlocked とそろえる・2026-11-05 木下氏）
+  const m=readMax(pb(q)); if(m && q.page>m) return false;   // 読んだページより後ろは出さない（その問題の問題集の記録で）
+  if(!m && !bookAnswered(pb(q))) return false;              // 読んだ記録も答えた記録も無い冊は出さない（学習状況の数え方 unlocked とそろえる・2026-11-05 木下氏）
   return ALL || !RANGE.size || RANGE.has(q.ch);
 }
 function QR(){ return QA().filter(inRange); }
@@ -953,7 +960,7 @@ function renderHome(){
   }).join('');
   document.getElementById('allN').innerHTML=`定着度に関係なく全${QR().length}問`;
   /* 全体のときは、範囲を選ぶボタン・章の一覧・読んだページの入力を出さない（読んだページは問題集を選んで入れる） */
-  document.getElementById('rdRow').style.display=ALL?'none':'';
+  document.getElementById('rdRow').style.display=(ALL||BOOK.kw)?'none':'';
   document.getElementById('chlist').style.display=ALL?'none':'';
   document.querySelectorAll('.rangehd button').forEach(e=>e.style.display=ALL?'none':'');
   if(ALL){
@@ -1118,6 +1125,11 @@ function connectSync(){
         const d=(remoteAll && remoteAll[b.field]) || null;
         remoteNB[b.no]=nP(d&&d.p); remoteN+=remoteNB[b.no];
         if(d && mergeRemote(SB[b.no],d)) changed=true;
+      }
+      for(const no in XR){                  // ⑪の用語を習う冊の読んだページ（読むだけ）
+        const d=(remoteAll && remoteAll[BK[no].field]) || null; if(!d) continue;
+        for(const k in d.read||{}){ const r=d.read[k]||{}, l=XR[no].read[k]; if(typeof r.p==='number' && (!l || (r.at||0)>(l.at||0))) XR[no].read[k]={p:r.p, at:r.at||0}; }
+        if(d.p && !Object.keys(XR[no].p).length){ XR[no].p=d.p; delete answeredBook[no]; }
       }
       const wasFirst=!firstSnap;
       if(fixTodayN()) changed=true;
@@ -1452,7 +1464,7 @@ function load(){
   document.getElementById('card').classList.remove('done');
   const d=draw(cur); cur._text=d.text; cur._ans=d.ans; cur._x=d.x||{}; cur._v=d.v||0;
   document.getElementById('lawname').textContent=cur.law; showQToday();
-  const cb=BK[cur._b]||BOOK;
+  const cb=BK[pb(cur)]||BOOK;
   document.getElementById('tag').textContent=`${cur.no?cur.no+'　':''}${cb.mark}${cb.tag}・p.${cur.page}`;
   document.getElementById('cnt').textContent=`${idx+1} / ${pool.length}　${LV[box(cur.id)]}`;
   document.getElementById('fb').style.display='none';
@@ -1623,7 +1635,7 @@ function feedback(ok,correctLabel){
     +(cur.detail?`<div class="detail">${cur.detail}</div>`:'')
     +ykBox(cur)
     +scoreLine(cur)
-    +refLine(cur.page,BK[cur._b],cur.hd);
+    +refLine(cur.page,BK[pb(cur)],cur.hd);
   const sec=stopTimer(); lastSec=sec;
   saveSession();                        // 回答済みであることを残す（中断→再開で同じ問題に戻らない）
   /* 正しく × と答えたときだけ、誤り箇所を問う。
